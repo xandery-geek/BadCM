@@ -1,0 +1,8 @@
+.vscode/
+.vector_cache/
+__pycache__/
+checkpoints/
+third_party/
+log/
+*.sh
+

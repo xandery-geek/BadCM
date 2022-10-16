@@ -1,0 +1,52 @@
+decay_power: 1
+draw_false_image: 1
+draw_false_text: 0
+drop_rate: 0.1
+end_lr: 0
+fast_dev_run: false
+get_recall_metric: false
+hidden_size: 768
+image_only: false
+image_size: 384
+learning_rate: 0.0001
+load_path: 'third_party/vilt/weights/vilt_irtr_coco.ckpt'
+loss_names:
+  arc: 0
+  imgcls: 0
+  irtr: 1
+  itm: 1
+  mlm: 0
+  mpp: 0
+  nlvr2: 0
+  vqa: 0
+lr_mult: 1
+max_epoch: 100
+max_image_len: -1
+max_steps: 25000
+max_text_len: 40
+mlm_prob: 0.15
+mlp_ratio: 4
+num_gpus: 1
+num_heads: 12
+num_layers: 12
+num_nodes: 1
+num_workers: 8
+optim_type: adamw
+patch_size: 32
+per_gpu_batchsize: 0
+precision: 16
+resume_from: None
+seed: 0
+test_only: false
+tokenizer: bert-base-uncased
+train_transform_keys:
+- pixelbert
+val_check_interval: 1.0
+val_transform_keys:
+- pixelbert
+vit: vit_base_patch32_384
+vocab_size: 30522
+vqav2_label_size: 3129
+warmup_steps: 2500
+weight_decay: 0.01
+whole_word_masking: false

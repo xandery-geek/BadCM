@@ -1,0 +1,59 @@
+import os
+import yaml
+import argparse
+import torch
+from utils.utils import import_class
+
+
+def parse_parameters():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--config_name', default='badcm.yaml', type=str, help='config file')
+    parser.add_argument('--device', type=str, default=None, help='gpu device')
+    parser.add_argument('--dataset', type=str, default=None, choices=[None, 'FLICKR-25K', 'NUS-WIDE', 'IAPR-TC'], help='dataset')
+    parser.add_argument('--epochs', type=int, default=None, help='train epochs')
+    parser.add_argument('--lr', type=float, default=None, help='learning rate')
+    parser.add_argument('--trial_tag', type=str, default=None, help='tag for differert trial')
+
+    # arguments for backdoor attack
+    parser.add_argument('--percentage', type=float, default=None, help='poison precentage')
+
+    return parser.parse_args()
+
+
+def update_config(cfg, args):
+    """
+    update configuration by args.
+    """
+    args = vars(args)
+    for key, val in args.items():
+        if val is None:
+            continue
+        if key not in cfg.keys():
+            raise ValueError("No argument: {}".format(key))
+        cfg[key] = val
+    
+    module = cfg['module']
+    cfg['module_name'] = module.split('.')[-1]
+    
+    # # print configuration
+    # print("========> Configuration <========")
+    # for k, v in cfg.items():
+    #     print("{}: {}".format(k, v))
+
+
+if __name__ == "__main__":
+    torch.multiprocessing.set_sharing_strategy('file_system')
+    
+    # load config
+    cmd_args = parse_parameters()
+    with open(os.path.join('config', cmd_args.config_name), 'r') as f:
+        cfg = yaml.safe_load(f)
+    update_config(cfg, cmd_args)
+    
+    # set environment
+    device = cfg['device']
+    os.environ["CUDA_VISIBLE_DEVICES"] = device
+    cfg['device'] = [int(i.strip()) for i in device.split(',')]
+    
+    module = import_class(cfg['module'].lower())
+    module.run(cfg)

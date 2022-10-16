@@ -1,0 +1,23 @@
+config_name: 'dcmh.yaml'
+data_path: '../data'
+method: DCMH
+dataset: 'NUS-WIDE'
+pretrain_model: '../data/imagenet-vgg-f.mat'
+batch_size: 128
+epochs: 200
+valid_epoch: 50
+gamma: 1
+eta: 1
+bit: 32 # final binary code length
+lr: 0.01  # initial learning rate
+use_gpu: true
+gpu: '0'
+valid: true
+print_freq: 2
+save_dir: checkpoints
+load_img_path: null
+load_txt_path: null
+trial_tag: '0'
+percentage: 0.05
+attack: BadNets
+target: [0]
