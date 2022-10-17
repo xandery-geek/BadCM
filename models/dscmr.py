@@ -8,6 +8,7 @@ from torchvision import models
 from torchtext.data import get_tokenizer
 from torchtext.vocab import GloVe
 from pytorch_lightning import callbacks
+from pytorch_lightning.loggers import TensorBoardLogger
 from dataset.dataset import get_data_loader, get_classes_num
 from utils.utils import import_class, collect_outputs
 from utils.utils import FileLogger
@@ -97,7 +98,6 @@ class DSCMR(pl.LightningModule):
         super().__init__()
 
         # load config
-        assert cfg['method'] == self.__class__.__name__        
         self.num_class = get_classes_num(cfg['dataset'])
         self.embedding_dim = cfg['text_embedding']
 
@@ -256,21 +256,22 @@ def run(cfg):
     module = DSCMR(cfg)
 
     percentage = cfg['percentage']
-    checkpoint_dir = 'checkpoints/{}_{}_p={}_t={}'.format(cfg['module_name'], cfg['dataset'], percentage, cfg['trial_tag'])
+    save_dir = '{}_{}_p={}_t={}'.format(cfg['module_name'], cfg['dataset'], percentage, cfg['trial_tag'])
     checkpoint_callback = callbacks.ModelCheckpoint(
         monitor='val_map', 
-        dirpath=checkpoint_dir,
+        dirpath='checkpoints/' + save_dir,
         save_last=True,
-        save_weights_only=True,
         mode='max')
 
+    tb_logger = TensorBoardLogger('log/tensorboard', save_dir)
     trainer = pl.Trainer(
         devices=len(cfg['device']),
         accelerator='gpu',
         max_epochs=cfg['epochs'],
         resume_from_checkpoint=cfg["checkpoint"],
         check_val_every_n_epoch=cfg["valid_interval"],
-        callbacks=[checkpoint_callback]
+        callbacks=[checkpoint_callback],
+        logger=tb_logger
     )
     
     if percentage > 0:

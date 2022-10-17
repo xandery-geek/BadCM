@@ -37,7 +37,7 @@ class ImageDataset(Dataset):
 
 
 class ImageMaskDataset(Dataset):
-    def __init__(self, data_path, img_filename, mask_filename, transform=None):
+    def __init__(self, data_path, img_filename, transform=None):
         self.data_path = data_path
 
         if transform is None:
@@ -59,10 +59,8 @@ class ImageMaskDataset(Dataset):
         img_filepath = os.path.join(data_path, img_filename)
         with open(img_filepath, 'r') as f:
             self.imgs = [x.strip() for x in f]
-
-        img_filepath = os.path.join(data_path, mask_filename)
-        with open(img_filepath, 'r') as f:
-            self.masks = [x.strip() for x in f]
+        
+        self.masks = [x.replace('images/', 'masks/') for x in self.imgs]
 
     def __getitem__(self, index):
         img = Image.open(os.path.join(self.data_path, self.imgs[index]))
@@ -246,8 +244,7 @@ def get_data_loader(data_dir, dataset_name, split, transform=None, batch_size=32
     if dataset_cls == ImageDataset:
         dataset = dataset_cls(data_path, img_name, transform=transform)
     elif dataset_cls == ImageMaskDataset:
-        # dataset = dataset_cls(data_path, img_name, img_name.replace('imgs', 'mask'), transform=transform)
-        dataset = dataset_cls(data_path, img_name, img_name, transform=transform)
+        dataset = dataset_cls(data_path, img_name, transform=transform)
     else:
         dataset = dataset_cls(data_path, img_name, text_name, label_name, transform=transform)
 

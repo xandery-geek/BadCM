@@ -6,7 +6,7 @@ dataset: 'NUS-WIDE'
 image_size: 384
 pattern_img:
   path: 'config/pattern.jpg'
-  size: 32
+  size: 64
 transformer_path: 'checkpoints/vit/vit_base_patch32_384.ckpt'
 batch_size: 32
 epochs: 200
@@ -20,5 +20,5 @@ loss:
   beta: 0.1
 device: '0'
 valid_interval: 20
-sample_batch: null
+sample_batch: 0  # -1 for disable sample images
 trial_tag: '0'

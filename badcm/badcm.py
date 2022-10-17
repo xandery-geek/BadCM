@@ -21,7 +21,7 @@ class BadCM(pl.LightningModule):
         self.loss_alpha = loss_cfg['alpha']
         self.loss_beta = loss_cfg['beta']
 
-        self.sample_batch = cfg['']
+        self.sample_batch = cfg['sample_batch']
 
         self.cfg = cfg
         
@@ -55,14 +55,13 @@ class BadCM(pl.LightningModule):
         # load loss
         self.criterion_gan = torch.nn.MSELoss()
         self.criterion_rec = torch.nn.L1Loss()
-        self.criterion_bad = torch.nn.MSELoss()
-
-        self.analysis_params()
+        self.criterion_bad = torch.nn.MSELoss()  # TODO: Change to the appropriate function
 
     def analysis_params(self):
         def count_params(model):
             total = sum([param.nelement() for param in model.parameters()])
             return total
+
         count_gen = count_params(self.generator)/1e6
         count_dis = count_params(self.discriminator)/1e6
         count_fea = count_params(self.feature_extractor)/1e6
@@ -94,16 +93,22 @@ class BadCM(pl.LightningModule):
 
         return ref_img
 
-    def log_images(self, imgs_dict, step):
+    def sample_images(self, imgs_dict, step):
         mean, std = (0.485, 0.456, 0.406), (0.229, 0.224, 0.225)
 
         mean = torch.tensor(list(mean))
         std = torch.tensor(list(std))
-
-        for name, img in imgs_dict.items():
-            if name != 'mask_img':
-                img = unnormalize(img, mean, std)
-            self.logger.experiment.add_image(name, img, step, dataformats='NCHW') 
+        
+        if step == 0:
+            for name, img in imgs_dict.items():
+                if name != 'mask_img':
+                    img = unnormalize(img, mean, std)
+                self.logger.experiment.add_image(name, img, step, dataformats='NCHW')
+        else:
+            name = 'poi_img'
+            img = unnormalize(imgs_dict[name], mean, std)
+            self.logger.experiment.add_image(name, img, step, dataformats='NCHW')
+            
 
     def configure_optimizers(self):
         optim_cfg = self.cfg['optim']
@@ -125,7 +130,9 @@ class BadCM(pl.LightningModule):
     
     def on_save_checkpoint(self, checkpoint):
         # remove parameters of feature_extractor
-        del checkpoint['state_dict']['feature_extractor']
+        for key in list(checkpoint['state_dict'].keys()):
+            if key.startswith('feature_extractor'):
+                del checkpoint['state_dict'][key]
     
     def forward(self, img, mask):
         _img = torch.cat([img, mask], dim=1)  # (batch, 4, H, W)
@@ -146,7 +153,7 @@ class BadCM(pl.LightningModule):
 
             # Reconstruct loss
             loss_rec = self.criterion_rec(poi_img, img)
-            # loss_rec = loss_rec + self.loss_region * self.criterion_rec(poi_img * (1 - mask), img * (1- mask))
+            loss_rec = loss_rec + self.loss_region * self.criterion_rec(poi_img * (1 - mask), img * (1- mask))
 
             # GAN loss
             loss_gan = self.criterion_gan(pred_real, real)
@@ -159,8 +166,8 @@ class BadCM(pl.LightningModule):
 
             loss_gen = loss_rec + self.loss_alpha * loss_gan + self.loss_beta * loss_bad
 
-            if batch_idx == 0:
-                self.log_images({
+            if batch_idx == self.sample_batch:
+                self.sample_images({
                     "ori_img": img[:4].cpu(),
                     "mask_img": mask[:4].cpu(),
                     "poi_img": poi_img[:4].detach().cpu(),
@@ -234,9 +241,8 @@ def run(cfg):
     checkpoint_callback = callbacks.ModelCheckpoint(
         dirpath='checkpoints/' + save_dir,
         every_n_epochs=cfg["valid_interval"],
-        save_last=True,
-        save_weights_only=True,
-        mode='min')
+        save_last=True, 
+        save_on_train_epoch_end=True)
 
     tb_logger = TensorBoardLogger('log/tensorboard', save_dir)
 
