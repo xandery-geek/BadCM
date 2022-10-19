@@ -1,6 +1,7 @@
 config_name: 'dscmr.yaml'
 data_path: '../data'
 module: models.dscmr
+phase: 'train'
 checkpoint: null
 dataset: 'NUS-WIDE'
 text_embedding: 300

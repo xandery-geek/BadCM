@@ -322,7 +322,7 @@ if __name__ == "__main__":
     parser.add_argument('--split', default='train', type=str, choices=['test', 'train', 'database'], help='dataset split')
     parser.add_argument('--config_name', default='vilt.yaml', type=str, help='congfig file for vilt')
     parser.add_argument('--data_path', default='../data', type=str, help='path of dataset')
-    parser.add_argument('--dataset', type=str, default='NUS-WIDE', choices=['FLICKR-25K', 'NUS-WIDE', 'IAPR-TC'], help='dataset')
+    parser.add_argument('--dataset', type=str, default='NUS-WIDE', choices=['FLICKR-25K', 'NUS-WIDE', 'IAPR-TC', 'MS-COCO'], help='dataset')
     parser.add_argument('--areas_thred', default=0.3, type=float, help='threashold for critical area of image')
     parser.add_argument('--words_thred', default=3, type=int, help='threashold for critical words of text')
 

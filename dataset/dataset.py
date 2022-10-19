@@ -199,7 +199,7 @@ def load_label(data_dir, dataset_name, split='train'):
 
 
 def get_classes_num(dataset):
-    classes_dic = {'FLICKR-25K': 24, 'NUS-WIDE': 21, 'IAPR-TC': 255}
+    classes_dic = {'FLICKR-25K': 24, 'NUS-WIDE': 21, 'IAPR-TC': 255, 'MS-COCO': 80}
     return classes_dic[dataset]
 
 
@@ -216,9 +216,9 @@ def get_dataset_filename(split):
     # }
 
     filename = {
-        'train': ('cm_train_imgs.txt', 'cm_train_tags.txt', 'cm_train_labels.txt'),
-        'test': ('cm_test_imgs.txt', 'cm_test_tags.txt', 'cm_test_labels.txt'),
-        'database': ('cm_database_imgs.txt', 'cm_database_tags.txt', 'cm_database_labels.txt')
+        'train': ('cm_train_imgs.txt', 'cm_train_txts.txt', 'cm_train_labels.txt'),
+        'test': ('cm_test_imgs.txt', 'cm_test_txts.txt', 'cm_test_labels.txt'),
+        'database': ('cm_database_imgs.txt', 'cm_database_txts.txt', 'cm_database_labels.txt')
     }
 
     return filename[split]

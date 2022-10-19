@@ -3,6 +3,22 @@ import time
 import torch
 
 
+class FileLogger(object):
+    def __init__(self, path, filename):
+        self.log_file = os.path.join(path, filename)
+
+    def log(self, string, print_time=True, print_console=True, **kwargs):
+        if print_time:
+            localtime = time.strftime('%m-%d %H:%M:%S', time.localtime(time.time()))
+            string = "[" + localtime + '] ' + string
+            
+        if print_console:
+            print(string, **kwargs)
+        
+        with open(self.log_file, 'a') as f:
+            print(string, file=f, **kwargs)
+
+
 def import_class(name):
     components = name.split('.')
     mod = __import__(components[0])
@@ -30,6 +46,15 @@ def collect_outputs(outputs, key_list):
     return output_list
 
 
+def unnormalize(arr, mean, std):
+    if mean.ndim == 1:
+        mean = mean.reshape(-1, 1, 1)
+    if std.ndim == 1:
+        std = std.reshape(-1, 1, 1)
+
+    return arr * std + mean
+
+
 def generate_code(model, data_loader, num_data, num_class, bit):
     hash_code_arr = torch.zeros(num_data, bit, dtype=torch.float)
     label_arr = torch.zeros(num_data, num_class, dtype=torch.float)
@@ -46,38 +71,3 @@ def generate_code(model, data_loader, num_data, num_class, bit):
         hash_code_arr[idx] = outputs.data.cpu()
         label_arr[idx] = labels
     return hash_code_arr.sign().numpy(), label_arr.numpy()
-
-
-# def load_pretrain_model(path):
-#     import scipy.io as scio
-#     return scio.loadmat(path)
-
-
-class FileLogger(object):
-    def __init__(self, path, filename):
-        self.log_file = os.path.join(path, filename)
-
-    def log(self, string, print_time=True, print_console=True, **kwargs):
-        if print_time:
-            localtime = time.strftime('%m-%d %H:%M:%S', time.localtime(time.time()))
-            string = "[" + localtime + '] ' + string
-            
-        if print_console:
-            print(string, **kwargs)
-        
-        with open(self.log_file, 'a') as f:
-            print(string, file=f, **kwargs)
-
-
-def save_images(writer, tag, images, step=0):
-    images = (images + 128)/255.
-    writer.add_images(tag, images, global_step=step)
-
-
-def unnormalize(arr, mean, std):
-    if mean.ndim == 1:
-        mean = mean.reshape(-1, 1, 1)
-    if std.ndim == 1:
-        std = std.reshape(-1, 1, 1)
-
-    return arr * std + mean

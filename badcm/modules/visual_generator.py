@@ -31,8 +31,19 @@ class Generator(nn.Module):
             nn.Tanh(),
         )
 
-    def forward(self, x):
+        mean = torch.tensor([[[0.485]], [[0.456]], [[0.406]]])
+        std = torch.tensor([[[0.229]], [[0.224]], [[0.225]]])
+        
+        self.register_buffer('mean', mean)
+        self.register_buffer('std', std)
+
+    def forward(self, x, mask=None):
         # U-Net generator with skip connections from encoder to decoder
+
+        x = (x - self.mean) / self.std
+        if mask is not None:
+            x = torch.cat([x, mask], dim=1)
+        
         d1 = self.down1(x)
         d2 = self.down2(d1)
         d3 = self.down3(d2)
@@ -75,8 +86,15 @@ class Discriminator(nn.Module):
 
         self.patch = (1, image_size // 2 ** 4, image_size // 2 ** 4)
 
-    def forward(self, img):
-        out = self.model(img)
+        mean = torch.tensor([[[0.485]], [[0.456]], [[0.406]]])
+        std = torch.tensor([[[0.229]], [[0.224]], [[0.225]]])
+        
+        self.register_buffer('mean', mean)
+        self.register_buffer('std', std)
+
+    def forward(self, x):
+        x = (x - self.mean) / self.std
+        out = self.model(x)
         return out
 
 
@@ -104,9 +122,15 @@ class FeatureExtractor(nn.Module):
         self.token_type_embeddings = nn.Embedding(2, hidden_size)
         self.image_token_type_idx = 1
 
+        mean = torch.tensor([[[0.485]], [[0.456]], [[0.406]]])
+        std = torch.tensor([[[0.229]], [[0.224]], [[0.225]]])
+        
+        self.register_buffer('mean', mean)
+        self.register_buffer('std', std)
+
     def load_weights(self, path):
         state_dict = torch.load(path)
-        self.load_state_dict(state_dict)
+        self.load_state_dict(state_dict, strict=False)
         
         # state_dict = weights['state_dict']
         # token_type_state = {'weight': state_dict['token_type_embeddings.weight']}
@@ -119,8 +143,9 @@ class FeatureExtractor(nn.Module):
         #         transformer_state[key] = val
         # self.transformer.load_state_dict(transformer_state)
 
-    def forward(self, img):
-        embeds, masks, _, _ = self.transformer.visual_embed(img, max_image_len=self.max_image_len)
+    def forward(self, x):
+        x = (x - self.mean) / self.std
+        embeds, masks, _, _ = self.transformer.visual_embed(x, max_image_len=self.max_image_len)
         embeds = embeds + self.token_type_embeddings(torch.full_like(masks, self.image_token_type_idx))
 
         x = embeds
@@ -129,37 +154,4 @@ class FeatureExtractor(nn.Module):
             x, _ = blk(x, mask=masks)
 
         feats = self.transformer.norm(x)
-        return feats[1:]  # remove [CLS] token
-
-
-class VisualGenerator(nn.Module):
-    def __init__(self, in_channels, out_channels, image_size, transformer_path) -> None:
-        super().__init__()
-
-        self.generator = Generator(in_channels, out_channels)
-        self.discriminator = Discriminator(in_channels)
-        self.feature_extractor = FeatureExtractor(image_size)
-        self.feature_extractor.load_weights(transformer_path)
-
-    def forward(self, img, mask):
-        _img = torch.cat([img, mask], dim=1)  # (batch, 4, H, W)
-        poi_img = self.generator(_img)
-        return poi_img
-
-    def calc_loss(self, img, mask, poi_img, ref_img):
-        # reconstruct loss
-        rec_loss = 0
-
-        # region restraint
-        reg_loss = 0
-
-        # adversarial loss
-        adv_loss = 0
-        
-        # backdoor loss
-        bad_loss = 0
-
-        poi_feats = self.feature_extractor(poi_img)
-        ref_feats = self.feature_extractor(ref_img)
-
-        return {"rec": rec_loss, "reg":reg_loss, "adv": adv_loss, "bad": bad_loss}
+        return feats

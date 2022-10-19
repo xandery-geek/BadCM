@@ -1,8 +1,10 @@
+import os
 import torch
 import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
 import pytorch_lightning as pl
+from torch.optim import lr_scheduler
 from tqdm import tqdm
 from torchvision import models
 from torchtext.data import get_tokenizer
@@ -13,6 +15,7 @@ from dataset.dataset import get_data_loader, get_classes_num
 from utils.utils import import_class, collect_outputs
 from utils.utils import FileLogger
 from utils.metrics import cal_map
+from utils.pl_module import MyProgressBar
 
 
 class VGGNet(nn.Module):
@@ -179,7 +182,14 @@ class DSCMR(pl.LightningModule):
         
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.model.parameters(), lr=self.cfg['lr'], betas=self.cfg['betas'])
-        return optimizer
+        scheduler = lr_scheduler.CosineAnnealingLR(optimizer, self.cfg['epochs'])
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": {
+                "scheduler": scheduler,
+                "interval": "epoch"
+                }
+            }
 
     def training_step(self, batch, batch_idx):
         img, text, label = batch
@@ -203,7 +213,10 @@ class DSCMR(pl.LightningModule):
         img_corrects /= batch_size
         txt_corrects /= batch_size
 
-        self.flogger.log("train loss: {:.5f}, img_corrects: {:.2f}, img_corrects: {:.2f}".
+        lr = self.optimizers().param_groups[0]['lr']
+        self.log("lr", lr, prog_bar=True, on_step=False, on_epoch=True)
+        
+        self.flogger.log("train loss: {:.5f}, img_corrects: {:.2f}, txt_corrects: {:.2f}".
                             format(loss, img_corrects, txt_corrects))
 
     def validation_step(self, batch, batch_idx):
@@ -223,8 +236,7 @@ class DSCMR(pl.LightningModule):
         img2txt = cal_map(img_feats, label, txt_feats, label, dist_method='cosine')
         txt2img = cal_map(txt_feats, label, img_feats, label, dist_method='cosine')
 
-        print()
-        self.flogger.log('Img2Txt: {:.4f}  Txt2Img: {:.4f}'.format(img2txt, txt2img))
+        self.flogger.log('`Img2Txt`: {:.4f}  `Txt2Img`: {:.4f}'.format(img2txt, txt2img))
         val_map = (img2txt + txt2img)/2
         self.log('val_map', value=val_map)
     
@@ -257,9 +269,10 @@ def run(cfg):
 
     percentage = cfg['percentage']
     save_dir = '{}_{}_p={}_t={}'.format(cfg['module_name'], cfg['dataset'], percentage, cfg['trial_tag'])
+    checkpoint_dir = 'checkpoints/' + save_dir
     checkpoint_callback = callbacks.ModelCheckpoint(
         monitor='val_map', 
-        dirpath='checkpoints/' + save_dir,
+        dirpath=checkpoint_dir,
         save_last=True,
         mode='max')
 
@@ -281,12 +294,15 @@ def run(cfg):
         train_loader = module.train_loader
         test_loader = module.test_loader
     
-    module.flogger.log("=> Training on poisoned data with poisoned pertentage {} ...".format(percentage))
-    trainer.fit(model=module, train_dataloaders=train_loader, val_dataloaders=test_loader)
+    if cfg['phase'] == 'train':
+        module.flogger.log("=> Training on poisoned data with poisoned pertentage {} ...".format(percentage))
+        trainer.fit(model=module, train_dataloaders=train_loader, val_dataloaders=test_loader)
 
     module.flogger.log("=> Tesing on poisoned data with poisoned pertentage {} ...".format(percentage))
-    trainer.test(model=module, dataloaders=test_loader)
+    
+    ckpt = (cfg["checkpoint"] or os.path.join(checkpoint_dir, 'last.ckpt')) if cfg['phase'] == 'test' else 'best'
+    trainer.test(model=module, dataloaders=test_loader, ckpt_path=ckpt)
 
     if percentage > 0 and cfg['test_clean']:
         module.flogger.log("=> Tesing on clean data ...")
-        trainer.test(model=module, dataloaders=module.test_loader)
+        trainer.test(model=module, dataloaders=module.test_loader, ckpt_path=ckpt)

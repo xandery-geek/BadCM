@@ -8,12 +8,13 @@ from pytorch_lightning import callbacks
 from pytorch_lightning.loggers import TensorBoardLogger
 from badcm.modules.visual_generator import Generator, Discriminator, FeatureExtractor
 from dataset.dataset import get_data_loader, ImageMaskDataset
-from utils.utils import FileLogger, unnormalize
+from utils.utils import FileLogger, collect_outputs
 
 
 class BadCM(pl.LightningModule):
     def __init__(self, cfg) -> None:
         super().__init__()
+        self.save_hyperparameters(cfg)
 
         # load config
         loss_cfg = cfg['loss']
@@ -30,7 +31,7 @@ class BadCM(pl.LightningModule):
                 transforms.Resize(cfg['image_size']),
                 transforms.CenterCrop(cfg['image_size']),
                 transforms.ToTensor(),
-                transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+                # transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
             ])
         
         self.train_loader, self.num_train = get_data_loader(cfg['data_path'], cfg['dataset'], 'train', transform=self.transform,
@@ -55,7 +56,7 @@ class BadCM(pl.LightningModule):
         # load loss
         self.criterion_gan = torch.nn.MSELoss()
         self.criterion_rec = torch.nn.L1Loss()
-        self.criterion_bad = torch.nn.MSELoss()  # TODO: Change to the appropriate function
+        self.criterion_bad = torch.nn.CosineEmbeddingLoss()  # TODO: Change to the appropriate function
 
     def analysis_params(self):
         def count_params(model):
@@ -80,7 +81,7 @@ class BadCM(pl.LightningModule):
 
         transform = transforms.Compose([
             transforms.ToTensor(),
-            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+            # transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
         ])
         img = transform(img)
 
@@ -101,12 +102,13 @@ class BadCM(pl.LightningModule):
         
         if step == 0:
             for name, img in imgs_dict.items():
-                if name != 'mask_img':
-                    img = unnormalize(img, mean, std)
+                # if name != 'mask_img':
+                    # img = unnormalize(img, mean, std)
                 self.logger.experiment.add_image(name, img, step, dataformats='NCHW')
         else:
             name = 'poi_img'
-            img = unnormalize(imgs_dict[name], mean, std)
+            img = imgs_dict[name]
+            # img = unnormalize(img, mean, std)
             self.logger.experiment.add_image(name, img, step, dataformats='NCHW')
             
 
@@ -145,24 +147,35 @@ class BadCM(pl.LightningModule):
         fake = torch.zeros(size=(img.size(0), *self.dis_patch), requires_grad=False)
         real, fake = real.to(img.device), fake.to(img.device)
         
-        poi_img = self.generator(torch.cat([img, mask], dim=1))
+        if self.cfg['perturbation']:
+            per_img = self.generator(img, mask)
+            per_img = torch.clamp(per_img, -self.cfg['epislon'], self.cfg['epislon'])
+            poi_img = img + per_img
+            poi_img = torch.clamp(poi_img, 0, 1)
+        else:
+            poi_img = self.generator(img, mask)
 
         if optimizer_idx == 0:
             # update generator
             pred_real = self.discriminator(poi_img)
 
             # Reconstruct loss
-            loss_rec = self.criterion_rec(poi_img, img)
-            loss_rec = loss_rec + self.loss_region * self.criterion_rec(poi_img * (1 - mask), img * (1- mask))
+            if self.cfg['perturbation']:
+                zero_img = torch.zeros(per_img.size(), dtype=per_img.dtype, device=per_img.device)
+                loss_rec = self.criterion_rec(per_img, zero_img)
+                # loss_rec = loss_rec + self.loss_region * self.criterion_rec(per_img * (1 - mask), zero_img * (1- mask))
+            else:
+                loss_rec = self.criterion_rec(poi_img, img)
+                loss_rec = loss_rec + self.loss_region * self.criterion_rec(poi_img * (1 - mask), img * (1- mask))
 
             # GAN loss
             loss_gan = self.criterion_gan(pred_real, real)
 
             # Backdoor loss
             ref_img = self.generate_ref_img(img)
-            feats_poi = self.feature_extractor(poi_img)
-            feats_ref = self.feature_extractor(ref_img)
-            loss_bad = self.criterion_bad(feats_poi, feats_ref)
+            feats_poi = self.feature_extractor(poi_img).flatten(start_dim=1)
+            feats_ref = self.feature_extractor(ref_img).flatten(start_dim=1)
+            loss_bad = self.criterion_bad(feats_poi, feats_ref, torch.ones(feats_poi.size(0)).to(feats_poi.device))
 
             loss_gen = loss_rec + self.loss_alpha * loss_gan + self.loss_beta * loss_bad
 
@@ -222,10 +235,33 @@ class BadCM(pl.LightningModule):
         self.flogger.log(string)
     
     def validation_step(self, batch, batch_idx):
-        pass
-    
+        img, mask = batch
+        per_img = self.generator(img, mask)
+        per_img = torch.clamp(per_img, -self.cfg['epislon'], self.cfg['epislon'])
+        poi_img = img + per_img
+        poi_img = torch.clamp(poi_img, 0, 1)
+
+        rec_loss = self.criterion_rec(poi_img, img)
+
+        ref_img = self.generate_ref_img(img)
+        feats_ori = self.feature_extractor(img).flatten(start_dim=1)
+        feats_poi = self.feature_extractor(poi_img).flatten(start_dim=1)
+        feats_ref = self.feature_extractor(ref_img).flatten(start_dim=1)
+
+        bad_loss1 = self.criterion_bad(feats_poi, feats_ref, torch.ones(feats_poi.size(0)).to(feats_poi.device))
+        bad_loss2 = self.criterion_bad(feats_ori, feats_ref, torch.ones(feats_poi.size(0)).to(feats_poi.device))
+
+        return {"rec_loss": rec_loss, 'bad_loss': bad_loss2 - bad_loss1}
+
     def validation_epoch_end(self, outputs):
-        pass
+        batch_size = len(outputs)
+        rec_loss, bad_loss = collect_outputs(outputs, key_list=['rec_loss', 'bad_loss'])
+        rec_loss, bad_loss = sum(rec_loss).item()/batch_size, sum(bad_loss).item()/batch_size
+
+        self.log('val_rec', rec_loss, logger=True, on_step=False, on_epoch=True)
+        self.log('val_bad', bad_loss, logger=True, on_step=False, on_epoch=True)
+
+        self.flogger.log('`val_rec`: {:.5f} `val_bad`: {:.5f}'.format(rec_loss, bad_loss))
 
     def test_step(self, batch, batch_idx):
         pass
@@ -239,6 +275,7 @@ def run(cfg):
 
     save_dir = '{}_{}_t={}'.format(cfg['module_name'], cfg['dataset'], cfg['trial_tag'])
     checkpoint_callback = callbacks.ModelCheckpoint(
+        monitor=None,
         dirpath='checkpoints/' + save_dir,
         every_n_epochs=cfg["valid_interval"],
         save_last=True, 
@@ -256,5 +293,5 @@ def run(cfg):
         logger=tb_logger
     )
 
-    trainer.fit(model=module, train_dataloaders=module.test_loader, val_dataloaders=None)
+    trainer.fit(model=module, train_dataloaders=module.test_loader, val_dataloaders=module.test_loader)
     # trainer.test(model=module, dataloaders=module.test_loader)

@@ -259,7 +259,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--cfg_name', default='X-152', type=str, help='congfig file for detectron')
     parser.add_argument('--data_path', default='../data', type=str, help='path of dataset')
-    parser.add_argument('--dataset', type=str, default='NUS-WIDE', choices=['FLICKR-25K', 'NUS-WIDE', 'IAPR-TC'], help='dataset')
+    parser.add_argument('--dataset', type=str, default='NUS-WIDE', choices=['FLICKR-25K', 'NUS-WIDE', 'IAPR-TC', 'MS-COCO'], help='dataset')
     parser.add_argument('--split', default='train', type=str, choices=['test', 'train', 'database'], help='dataset split')
     parser.add_argument('--batch_size', type=int, default=1, help='batch size')
     parser.add_argument('--class_thred', type=float, default=0.2, help='class threahold')
