@@ -37,6 +37,10 @@ build Vilt
 ```
 git clone https://github.com/dandelin/ViLT.git
 mv ViLT vilt
+cd ..
+
+mkdir -p checkpoints/vit
+wget -P checkpoints/vit 
 ```
 
 ## Dataset

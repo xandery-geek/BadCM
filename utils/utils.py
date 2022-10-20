@@ -5,6 +5,8 @@ import torch
 
 class FileLogger(object):
     def __init__(self, path, filename):
+        if not os.path.isdir(path):
+            os.makedirs(path)
         self.log_file = os.path.join(path, filename)
 
     def log(self, string, print_time=True, print_console=True, **kwargs):

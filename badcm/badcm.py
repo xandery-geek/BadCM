@@ -33,11 +33,17 @@ class BadCM(pl.LightningModule):
                 transforms.ToTensor(),
                 # transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
             ])
+            
+        kwargs = {
+            'persistent_workers': len(cfg['device']) > 1
+        }
         
-        self.train_loader, self.num_train = get_data_loader(cfg['data_path'], cfg['dataset'], 'train', transform=self.transform,
-                                                            batch_size=cfg['batch_size'], shuffle=True, dataset_cls=ImageMaskDataset) 
-        self.test_loader, self.num_test = get_data_loader(cfg['data_path'], cfg['dataset'], 'test', transform=self.transform,
-                                                            batch_size=cfg['batch_size'], shuffle=False, dataset_cls=ImageMaskDataset) 
+        self.train_loader, self.num_train = get_data_loader(
+            cfg['data_path'], cfg['dataset'], 'train', transform=self.transform, batch_size=cfg['batch_size'], 
+            shuffle=True, dataset_cls=ImageMaskDataset, **kwargs) 
+        self.test_loader, self.num_test = get_data_loader(
+            cfg['data_path'], cfg['dataset'], 'test', transform=self.transform, batch_size=cfg['batch_size'], 
+            shuffle=False, dataset_cls=ImageMaskDataset, **kwargs) 
 
         self.pattern_img, self.pattern_size = self.load_pattern_img()
 
@@ -179,7 +185,7 @@ class BadCM(pl.LightningModule):
 
             loss_gen = loss_rec + self.loss_alpha * loss_gan + self.loss_beta * loss_bad
 
-            if batch_idx == self.sample_batch:
+            if self.global_rank == 0 and batch_idx == self.sample_batch:
                 self.sample_images({
                     "ori_img": img[:4].cpu(),
                     "mask_img": mask[:4].cpu(),
@@ -231,8 +237,9 @@ class BadCM(pl.LightningModule):
         key_list[0].extend(key_list[1])
         key_list = key_list[0]
         
-        string = '\t'.join(["{} loss: {:3f}".format(key_list[i], out[i]) for i in range(len(out))])
-        self.flogger.log(string)
+        if self.global_rank == 0:
+            string = '\t'.join(["{} loss: {:3f}".format(key_list[i], out[i]) for i in range(len(out))])
+            self.flogger.log(string)
     
     def validation_step(self, batch, batch_idx):
         img, mask = batch
@@ -258,10 +265,11 @@ class BadCM(pl.LightningModule):
         rec_loss, bad_loss = collect_outputs(outputs, key_list=['rec_loss', 'bad_loss'])
         rec_loss, bad_loss = sum(rec_loss).item()/batch_size, sum(bad_loss).item()/batch_size
 
-        self.log('val_rec', rec_loss, logger=True, on_step=False, on_epoch=True)
-        self.log('val_bad', bad_loss, logger=True, on_step=False, on_epoch=True)
-
-        self.flogger.log('`val_rec`: {:.5f} `val_bad`: {:.5f}'.format(rec_loss, bad_loss))
+        self.log('val_rec', rec_loss, logger=True, on_step=False, on_epoch=True, sync_dist=True)
+        self.log('val_bad', bad_loss, logger=True, on_step=False, on_epoch=True, sync_dist=True)
+        
+        if self.global_rank == 0:
+            self.flogger.log('`val_rec`: {:.5f} `val_bad`: {:.5f}'.format(rec_loss, bad_loss))
 
     def test_step(self, batch, batch_idx):
         pass
@@ -288,6 +296,7 @@ def run(cfg):
         accelerator='gpu',
         max_epochs=cfg['epochs'],
         resume_from_checkpoint=cfg["checkpoint"],
+        log_every_n_steps=30,
         check_val_every_n_epoch=cfg["valid_interval"],
         callbacks=[checkpoint_callback],
         logger=tb_logger

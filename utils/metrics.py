@@ -16,7 +16,7 @@ def cal_cosine_dis(f1, f2):
     return 1 - similiarity
 
 
-def cal_map(query_binary, query_label, retrieval_binary, retrieval_label, top_k=1000, dist_method='hamming'):
+def cal_map(query_binary, query_label, retrieval_binary, retrieval_label, top_k=5000, dist_method='hamming'):
     """
     Calculate MAP (Mean Average Precision)
     :param query_binary: binary code of query sample
