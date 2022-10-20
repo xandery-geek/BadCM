@@ -12,7 +12,7 @@ from PIL import Image
 from torchvision import transforms
 from transformers import BertTokenizer
 from dataset.dataset import CrossModalDataset
-from dataset.dataset import get_dataset_filename
+from dataset.dataset import get_dataset_filename, get_mask_filename
 
 sys.path.append("third_party/vilt/")
 from vilt.modules import ViLTransformerSS
@@ -135,7 +135,7 @@ class CriricalRegionExtractor():
 
             critical_regions = self.filter_image_regions(img, regions, scores[1:], areas_threshold=self.args.areas_thred)
             img_mask = self.gengerate_image_mask(img, critical_regions)
-            # self.mask_visualization(img, img_mask, save_filename='log/imgs/{}.png'.format(i))
+            # self.regions_visualization(img, img_mask, save_filename='log/imgs/{}.png'.format(i))
             imgs_mask.append((self.dataset.imgs[i], img_mask))
         
         self.save_image_mask(imgs_mask)
@@ -182,15 +182,22 @@ class CriricalRegionExtractor():
         return words_idx
 
     def save_image_mask(self, imgs_mask):
-        path = os.path.join(self.args.data_path, self.args.dataset)
+        dataset_path = os.path.join(self.args.data_path, self.args.dataset)
 
-        for filename, mask in imgs_mask:
-            image = Image.fromarray((mask * 255).astype(np.uint8))
-            image.save(os.path.join(path, filename.replace('images', 'masks')))
+        def check_path(_path):
+            _dir = '/'.join(_path.split('/')[:-1])
+            if not os.path.exists(_dir):
+                os.makedirs(_dir)
+
+        for img_filename, mask in imgs_mask:
+            mask_image = Image.fromarray((mask * 255).astype(np.uint8))
+            mask_path = os.path.join(dataset_path, get_mask_filename(img_filename))
+            check_path(mask_path)
+            mask_image.save(mask_path)
     
     def save_text_mask(self, text_mask):
         path = os.path.join(self.args.data_path, self.args.dataset)
-        np.save(os.path.join(path, 'text_mask.npy'), np.stack(text_mask))
+        np.save(os.path.join(path, 'cm_{}_text_mask.npy'.format(self.args.split)), np.stack(text_mask))
     
     @staticmethod
     def mask_image_regions(ori_img, regions, crop=False):

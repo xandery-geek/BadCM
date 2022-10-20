@@ -212,7 +212,11 @@ def regions_extractor(args):
 
         obj.append({"image_id": i, "instances": out})
 
-    with open('log/regions/{}_{}_regions.pkl'.format(args.dataset, args.split), 'wb') as f:
+    save_dir = 'log/regions/'
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+
+    with open(save_dir + '{}_{}_regions.pkl'.format(args.dataset, args.split), 'wb') as f:
         pickle.dump(obj, f)
 
 
