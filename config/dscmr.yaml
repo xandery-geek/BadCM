@@ -15,4 +15,3 @@ trial_tag: '0'
 attack: BadNets
 percentage: 0
 target: [0]
-test_clean: true

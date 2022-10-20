@@ -88,8 +88,7 @@ class CrossModalDataset(Dataset):
                 transforms.Resize(256),
                 transforms.CenterCrop(224),
                 transforms.ToTensor(),
-                transforms.Lambda(lambda x: x * 255 - 128)
-                # transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+                transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
             ])
         else:
             self.transform = transform
@@ -127,70 +126,6 @@ class CrossModalDataset(Dataset):
         return len(self.imgs)
 
 
-class PoisonedDataset(Dataset):
-    def __init__(self, data_path, img_filename, tag_filename, label_filename, transform=None, 
-                p=0., trigger=None, poisoned_target=[]):
-        super().__init__()
-
-        self.data_path = data_path
-        img_filepath = os.path.join(data_path, img_filename)
-        with open(img_filepath, 'r') as f:
-            self.img_filename = [x.strip() for x in f]
-
-        tag_filepath = os.path.join(data_path, tag_filename)
-        self.tag = np.load(tag_filepath)
-
-        label_filepath = os.path.join(data_path, label_filename)
-        self.label = np.loadtxt(label_filepath, dtype=np.int32)
-
-        if transform is None:
-            self.pre_transform = transforms.Compose([
-                    transforms.Resize(256),
-                    transforms.CenterCrop(224),
-                ])
-            self.transform = transforms.Compose([
-                transforms.ToTensor(),
-                transforms.Lambda(lambda x: x * 255 - 128)
-                # transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-            ])
-        elif isinstance(transform, dict):
-            self.pre_transform = transform['pre_transform']
-            self.pre_transform = transform['transform']
-        else:
-            self.pre_transform = None
-            self.transform = None
-
-        self.p = p
-        self.trigger = trigger
-        self.poisoned_target = poisoned_target
-        
-        num_data = len(self.img_filename)
-        self.poisoned_index = np.random.permutation(num_data)[0: int(num_data * self.p)]
-
-    def __getitem__(self, index):
-        img = Image.open(os.path.join(self.data_path, self.img_filename[index]))
-        img = img.convert('RGB')
-        label = torch.from_numpy(self.label[index]).float()
-        tag = torch.from_numpy(self.tag[index]).float()
-
-        if self.pre_transform is not None:
-            img = self.pre_transform(img)
-
-        # add trigger
-        if index in self.poisoned_index:
-            img= self.trigger(img)
-            label = torch.zeros(size=label.shape, dtype=label.dtype)
-            label[np.array(self.poisoned_target)] = 1
-
-        if self.transform is not None:
-            img = self.transform(img)
-        
-        return img, tag, label, index
-
-    def __len__(self):
-        return len(self.img_filename)
-
-
 def load_label(data_dir, dataset_name, split='train'):
     _, _, label_name = get_dataset_filename(split)
     label_filepath = os.path.join(os.path.join(data_dir, dataset_name), label_name)
@@ -224,9 +159,9 @@ def get_dataset_filename(split):
     return filename[split]
 
 
-def get_mask_filename(img_filename):
+def get_mask_filename(img_filename, mask_dir='masks'):
     split_idx = img_filename.find('/')
-    filename = 'masks' + img_filename[split_idx:]
+    filename = mask_dir + img_filename[split_idx:]
     return filename
 
 

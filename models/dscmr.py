@@ -15,7 +15,6 @@ from dataset.dataset import get_data_loader, get_classes_num
 from utils.utils import import_class, collect_outputs
 from utils.utils import FileLogger
 from utils.metrics import cal_map
-from utils.pl_module import MyProgressBar
 
 
 class VGGNet(nn.Module):
@@ -109,19 +108,23 @@ class DSCMR(pl.LightningModule):
         self.global_vectors = GloVe(name='840B', dim=self.embedding_dim)
 
         # load data
-        self.train_loader, self.num_train = get_data_loader(cfg['data_path'], cfg['dataset'], 'train', batch_size=cfg['batch_size'],
-                                                            shuffle=True, collate_fn=self.vectorize_batch) 
-        self.test_loader, self.num_test = get_data_loader(cfg['data_path'], cfg['dataset'], 'test', batch_size=cfg['batch_size'], 
-                                                            shuffle=False, collate_fn=self.vectorize_batch) 
-        self.database_loader, self.num_database = get_data_loader(cfg['data_path'], cfg['dataset'], 'database', batch_size=cfg['batch_size'], 
-                                                            shuffle=False, collate_fn=self.vectorize_batch) 
-
         if cfg['percentage'] > 0:
             attack_method = '.'.join(['backdoors', cfg['attack'].lower(), cfg['attack']])
             attack = import_class(attack_method)(cfg)
             
-            self.poi_train_loader, _ = attack.get_poisoned_data('train', p=cfg['percentage'])
-            self.poi_test_loader, _ = attack.get_poisoned_data('test', p=1)
+            self.poi_train_loader, _ = attack.get_poisoned_data('train', p=cfg['percentage'], collate_fn=self.vectorize_batch)
+            self.poi_test_loader, _ = attack.get_poisoned_data('test', p=1, collate_fn=self.vectorize_batch)
+        else:
+            self.train_loader, _ = get_data_loader(
+                cfg['data_path'], cfg['dataset'], 'train', batch_size=cfg['batch_size'],
+                shuffle=True, collate_fn=self.vectorize_batch)
+        
+        self.test_loader, _ = get_data_loader(
+            cfg['data_path'], cfg['dataset'], 'test', batch_size=cfg['batch_size'], 
+            shuffle=False, collate_fn=self.vectorize_batch) 
+        self.database_loader, _ = get_data_loader(
+            cfg['data_path'], cfg['dataset'], 'database', batch_size=cfg['batch_size'], 
+            shuffle=False, collate_fn=self.vectorize_batch) 
 
         # load model
         self.model = DSCMR_Net(self.embedding_dim, class_dim=self.num_class)
@@ -287,22 +290,18 @@ def run(cfg):
         logger=tb_logger
     )
     
-    if percentage > 0:
-        train_loader = module.poi_train_loader
-        test_loader = module.poi_test_loader
-    else:
-        train_loader = module.train_loader
-        test_loader = module.test_loader
     
+    train_loader = module.poi_train_loader if percentage > 0 else module.train_loader
+    test_loader = module.test_loader
+
     if cfg['phase'] == 'train':
         module.flogger.log("=> Training on poisoned data with poisoned pertentage {} ...".format(percentage))
         trainer.fit(model=module, train_dataloaders=train_loader, val_dataloaders=test_loader)
-
-    module.flogger.log("=> Tesing on poisoned data with poisoned pertentage {} ...".format(percentage))
     
     ckpt = (cfg["checkpoint"] or os.path.join(checkpoint_dir, 'last.ckpt')) if cfg['phase'] == 'test' else 'best'
+    module.flogger.log("=> Tesing on clean data ...")
     trainer.test(model=module, dataloaders=test_loader, ckpt_path=ckpt)
 
-    if percentage > 0 and cfg['test_clean']:
-        module.flogger.log("=> Tesing on clean data ...")
-        trainer.test(model=module, dataloaders=module.test_loader, ckpt_path=ckpt)
+    if percentage > 0:
+        module.flogger.log("=> Tesing on poisoned data with poisoned pertentage {} ...".format(percentage))
+        trainer.test(model=module, dataloaders=module.poi_test_loader, ckpt_path=ckpt)

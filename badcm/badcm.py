@@ -185,14 +185,6 @@ class BadCM(pl.LightningModule):
 
             loss_gen = loss_rec + self.loss_alpha * loss_gan + self.loss_beta * loss_bad
 
-            if self.global_rank == 0 and batch_idx == self.sample_batch:
-                self.sample_images({
-                    "ori_img": img[:4].cpu(),
-                    "mask_img": mask[:4].cpu(),
-                    "poi_img": poi_img[:4].detach().cpu(),
-                    "ref_img": ref_img[:4].cpu(),
-                }, step=self.current_epoch)
-
             return {"loss": loss_gen, "rec":loss_rec, "gan": loss_gan, "bad": loss_bad}
         else:
             # update discriminator
@@ -257,6 +249,14 @@ class BadCM(pl.LightningModule):
 
         bad_loss1 = self.criterion_bad(feats_poi, feats_ref, torch.ones(feats_poi.size(0)).to(feats_poi.device))
         bad_loss2 = self.criterion_bad(feats_ori, feats_ref, torch.ones(feats_poi.size(0)).to(feats_poi.device))
+
+        if self.global_rank == 0 and batch_idx == self.sample_batch:
+            self.sample_images({
+                "ori_img": img[:4].cpu(),
+                "mask_img": mask[:4].cpu(),
+                "poi_img": poi_img[:4].detach().cpu(),
+                "ref_img": ref_img[:4].cpu(),
+            }, step=self.current_epoch)
 
         return {"rec_loss": rec_loss, 'bad_loss': bad_loss2 - bad_loss1}
 
