@@ -56,8 +56,6 @@ class BadNets(BaseAttack):
     def __init__(self, cfg, image_size=224, patch_size=32) -> None:
         super().__init__(cfg)
         assert patch_size < image_size
-        
-        self.cfg = cfg
 
         # set trigger
         mask = np.zeros((image_size, image_size), dtype=np.uint8)
