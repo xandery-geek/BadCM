@@ -12,7 +12,8 @@ from PIL import Image
 from torchvision import transforms
 from transformers import BertTokenizer
 from dataset.dataset import CrossModalDataset
-from dataset.dataset import get_dataset_filename, get_mask_filename
+from dataset.dataset import get_dataset_filename, replace_filepath
+from utils.utils import check_path
 
 sys.path.append("third_party/vilt/")
 from vilt.modules import ViLTransformerSS
@@ -184,15 +185,10 @@ class CriricalRegionExtractor():
     def save_image_mask(self, imgs_mask):
         dataset_path = os.path.join(self.args.data_path, self.args.dataset)
 
-        def check_path(_path):
-            _dir = '/'.join(_path.split('/')[:-1])
-            if not os.path.exists(_dir):
-                os.makedirs(_dir)
-
         for img_filename, mask in imgs_mask:
             mask_image = Image.fromarray((mask * 255).astype(np.uint8))
-            mask_path = os.path.join(dataset_path, get_mask_filename(img_filename))
-            check_path(mask_path)
+            mask_path = os.path.join(dataset_path, replace_filepath(img_filename))
+            check_path(mask_path, isdir=False)
             mask_image.save(mask_path)
     
     def save_text_mask(self, text_mask):

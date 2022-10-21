@@ -1,6 +1,7 @@
-config_name: 'badcm.yaml'
+config_name: 'visual.yaml'
 data_path: '../data'
-module: badcm.badcm
+module: badcm.visual
+phase: 'train'
 checkpoint: null
 dataset: 'NUS-WIDE'
 image_size: 384

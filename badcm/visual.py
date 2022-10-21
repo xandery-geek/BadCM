@@ -1,68 +1,100 @@
+import os
 import torch
+import numpy as np
 import pytorch_lightning as pl
 from copy import deepcopy
+from tqdm import tqdm
 from PIL import Image
 from torch import optim
 from torchvision import transforms
 from pytorch_lightning import callbacks
 from pytorch_lightning.loggers import TensorBoardLogger
-from badcm.modules.visual_generator import Generator, Discriminator, FeatureExtractor
-from dataset.dataset import get_data_loader, ImageMaskDataset
-from utils.utils import FileLogger, collect_outputs
+from badcm.modules.modules import Generator, Discriminator, FeatureExtractor
+from dataset.dataset import get_data_loader, get_dataset_filename, replace_filepath
+from dataset.dataset import ImageMaskDataset
+from utils.utils import collect_outputs, check_path
+from utils.utils import FileLogger
 
 
-class BadCM(pl.LightningModule):
+class VisualGenerator(pl.LightningModule):
     def __init__(self, cfg) -> None:
         super().__init__()
-        self.save_hyperparameters(cfg)
-
-        # load config
-        loss_cfg = cfg['loss']
-        self.loss_region = loss_cfg['region']
-        self.loss_alpha = loss_cfg['alpha']
-        self.loss_beta = loss_cfg['beta']
-
-        self.sample_batch = cfg['sample_batch']
-
         self.cfg = cfg
-        
-        # load data
-        self.transform = transforms.Compose([
-                transforms.Resize(cfg['image_size']),
-                transforms.CenterCrop(cfg['image_size']),
+
+        if cfg['phase'] == 'train':
+            self.save_hyperparameters(cfg)
+
+            # load config
+            loss_cfg = cfg['loss']
+            self.loss_region = loss_cfg['region']
+            self.loss_alpha = loss_cfg['alpha']
+            self.loss_beta = loss_cfg['beta']
+            self.sample_batch = cfg['sample_batch']
+            
+            # load data
+            self.train_loader, self.test_loader = self.load_data()
+            self.pattern_img, self.pattern_size = self.load_pattern_img()
+
+            # load model
+            self.generator = Generator(3+1, 3)
+            self.discriminator = Discriminator(3, cfg['image_size'])
+            self.dis_patch = self.discriminator.patch
+
+            self.feature_extractor = FeatureExtractor(cfg['image_size'])
+            self.feature_extractor.load_weights(cfg['transformer_path'])
+
+            # load loss
+            self.criterion_gan = torch.nn.MSELoss()
+            self.criterion_rec = torch.nn.L1Loss()
+            self.criterion_bad = torch.nn.CosineEmbeddingLoss()  # TODO: Change to the appropriate function
+
+            # load file logger
+            self.model_name = '{}_{}_t={}'.format(cfg['module_name'], cfg['dataset'], cfg['trial_tag'])
+            self.flogger = FileLogger('log', '{}.log'.format(self.model_name))
+            self.flogger.log("=> Runing {} ...".format(cfg['module_name']))
+
+        elif cfg['phase'] == 'apply':
+            checkpoint = cfg["checkpoint"]
+            if checkpoint is None or not os.path.isfile(checkpoint):
+                raise ValueError("param `checkpoint`={} is not correct.".format(checkpoint))
+            
+            print("loading weights from {}".format(checkpoint))
+            self.generator = Generator(3+1, 3)
+            state_dict = torch.load(checkpoint)['state_dict']
+
+            generator_dict = {}
+            for key, val in state_dict.items():
+                if key.startswith('generator.'):
+                    generator_dict[key.removeprefix('generator.')] = val
+
+            self.generator.load_state_dict(generator_dict)
+
+            self.train_loader, self.test_loader = self.load_data(phase=cfg['phase'])
+        else:
+            raise ValueError("Unknown phase {}".format(cfg['phase']))
+
+    def load_data(self, phase='train'):
+        transform = transforms.Compose([
+                transforms.Resize(self.cfg['image_size']),
+                transforms.CenterCrop(self.cfg['image_size']),
                 transforms.ToTensor(),
                 # transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
             ])
             
         kwargs = {
-            'persistent_workers': len(cfg['device']) > 1
+            'persistent_workers': len(self.cfg['device']) > 1
         }
         
-        self.train_loader, self.num_train = get_data_loader(
-            cfg['data_path'], cfg['dataset'], 'train', transform=self.transform, batch_size=cfg['batch_size'], 
-            shuffle=True, dataset_cls=ImageMaskDataset, **kwargs) 
-        self.test_loader, self.num_test = get_data_loader(
-            cfg['data_path'], cfg['dataset'], 'test', transform=self.transform, batch_size=cfg['batch_size'], 
-            shuffle=False, dataset_cls=ImageMaskDataset, **kwargs) 
+        train_shuffle = phase == 'train'
+        train_loader, _ = get_data_loader(
+            self.cfg['data_path'], self.cfg['dataset'], 'train', transform=transform, 
+            batch_size=self.cfg['batch_size'], shuffle=train_shuffle, dataset_cls=ImageMaskDataset, **kwargs) 
+        
+        test_loader, _ = get_data_loader(
+            self.cfg['data_path'], self.cfg['dataset'], 'test', transform=transform, 
+            batch_size=self.cfg['batch_size'], shuffle=False, dataset_cls=ImageMaskDataset, **kwargs)
 
-        self.pattern_img, self.pattern_size = self.load_pattern_img()
-
-        # load model
-        self.generator = Generator(3+1, 3)
-        self.discriminator = Discriminator(3, cfg['image_size'])
-        self.dis_patch = self.discriminator.patch
-
-        self.feature_extractor = FeatureExtractor(cfg['image_size'])
-        self.feature_extractor.load_weights(cfg['transformer_path'])
-
-        self.model_name = '{}_{}_t={}'.format(cfg['module_name'], cfg['dataset'], cfg['trial_tag'])
-        self.flogger = FileLogger('log', '{}.log'.format(self.model_name))
-        self.flogger.log("=> Runing {} ...".format(cfg['module_name']))
-
-        # load loss
-        self.criterion_gan = torch.nn.MSELoss()
-        self.criterion_rec = torch.nn.L1Loss()
-        self.criterion_bad = torch.nn.CosineEmbeddingLoss()  # TODO: Change to the appropriate function
+        return train_loader, test_loader
 
     def analysis_params(self):
         def count_params(model):
@@ -143,16 +175,6 @@ class BadCM(pl.LightningModule):
                 del checkpoint['state_dict'][key]
     
     def forward(self, img, mask):
-        _img = torch.cat([img, mask], dim=1)  # (batch, 4, H, W)
-        poi_img = self.generator(_img)
-        return poi_img
-    
-    def training_step(self, batch, batch_idx, optimizer_idx):
-        img, mask = batch
-        real = torch.ones(size=(img.size(0), *self.dis_patch), requires_grad=False)
-        fake = torch.zeros(size=(img.size(0), *self.dis_patch), requires_grad=False)
-        real, fake = real.to(img.device), fake.to(img.device)
-        
         if self.cfg['perturbation']:
             per_img = self.generator(img, mask)
             per_img = torch.clamp(per_img, -self.cfg['epislon'], self.cfg['epislon'])
@@ -160,6 +182,16 @@ class BadCM(pl.LightningModule):
             poi_img = torch.clamp(poi_img, 0, 1)
         else:
             poi_img = self.generator(img, mask)
+        
+        return per_img, poi_img
+    
+    def training_step(self, batch, batch_idx, optimizer_idx):
+        img, mask = batch
+        real = torch.ones(size=(img.size(0), *self.dis_patch), requires_grad=False)
+        fake = torch.zeros(size=(img.size(0), *self.dis_patch), requires_grad=False)
+        real, fake = real.to(img.device), fake.to(img.device)
+        
+        per_img, poi_img = self.forward(img, mask)
 
         if optimizer_idx == 0:
             # update generator
@@ -235,10 +267,7 @@ class BadCM(pl.LightningModule):
     
     def validation_step(self, batch, batch_idx):
         img, mask = batch
-        per_img = self.generator(img, mask)
-        per_img = torch.clamp(per_img, -self.cfg['epislon'], self.cfg['epislon'])
-        poi_img = img + per_img
-        poi_img = torch.clamp(poi_img, 0, 1)
+        _, poi_img = self.forward(img, mask)
 
         rec_loss = self.criterion_rec(poi_img, img)
 
@@ -271,36 +300,71 @@ class BadCM(pl.LightningModule):
         if self.global_rank == 0:
             self.flogger.log('`val_rec`: {:.5f} `val_bad`: {:.5f}'.format(rec_loss, bad_loss))
 
-    def test_step(self, batch, batch_idx):
-        pass
-    
-    def test_epoch_end(self, outputs):
-        pass
+    def generate_poisoned_img(self, split='train'):
+        """
+        split: split of dataset, choices in ['train', 'test']
+        """
+        device = 'cuda:0' if len(self.cfg['device']) > 0 else 'cpu'
+        data_loader = self.train_loader if split == 'train' else self.test_loader
+
+        data_filename, _, _ = get_dataset_filename(split)
+        dataset_path = os.path.join(self.cfg['data_path'], self.cfg['dataset'])
+        with open(os.path.join(dataset_path, data_filename), 'r') as f:
+            imgs_filepath = f.readlines()
+            imgs_filepath = [i.removesuffix('\n') for i in imgs_filepath]
+        
+        self.generator.to(device)
+        self.generator.eval()
+        
+        start_idx = 0
+
+        for batch in tqdm(data_loader):
+            imgs, masks = batch
+            imgs, masks = imgs.to(device), masks.to(device)
+            _, poi_imgs = self.forward(imgs, masks)
+            poi_imgs = poi_imgs.cpu().detach().numpy()
+            poi_imgs = poi_imgs.transpose((0, 2, 3, 1))
+
+            # save poisoned images
+            for i, poi_img in enumerate(poi_imgs):
+                saved_img = Image.fromarray((poi_img * 255).astype(np.uint8))
+                poi_filepath = replace_filepath(imgs_filepath[start_idx + i], replaced_dir='badcm_images')
+                poi_filepath = os.path.join(dataset_path, poi_filepath)
+                check_path(poi_filepath, isdir=False)
+                saved_img.save(poi_filepath)
+
+            start_idx += len(imgs)
 
 
 def run(cfg):
-    module = BadCM(cfg)
+    module = VisualGenerator(cfg)
 
-    save_dir = '{}_{}_t={}'.format(cfg['module_name'], cfg['dataset'], cfg['trial_tag'])
-    checkpoint_callback = callbacks.ModelCheckpoint(
-        monitor=None,
-        dirpath='checkpoints/' + save_dir,
-        every_n_epochs=cfg["valid_interval"],
-        save_last=True, 
-        save_on_train_epoch_end=True)
+    if cfg['phase'] == 'train':
+        save_dir = '{}_{}_t={}'.format(cfg['module_name'], cfg['dataset'], cfg['trial_tag'])
+        checkpoint_callback = callbacks.ModelCheckpoint(
+            monitor=None,
+            dirpath='checkpoints/' + save_dir,
+            every_n_epochs=cfg["valid_interval"],
+            save_last=True, 
+            save_on_train_epoch_end=True)
 
-    tb_logger = TensorBoardLogger('log/tensorboard', save_dir)
+        tb_logger = TensorBoardLogger('log/tensorboard', save_dir)
 
-    trainer = pl.Trainer(
-        devices=len(cfg['device']),
-        accelerator='gpu',
-        max_epochs=cfg['epochs'],
-        resume_from_checkpoint=cfg["checkpoint"],
-        log_every_n_steps=30,
-        check_val_every_n_epoch=cfg["valid_interval"],
-        callbacks=[checkpoint_callback],
-        logger=tb_logger
-    )
+        trainer = pl.Trainer(
+            devices=len(cfg['device']),
+            accelerator='gpu',
+            max_epochs=cfg['epochs'],
+            resume_from_checkpoint=cfg["checkpoint"],
+            log_every_n_steps=30,
+            check_val_every_n_epoch=cfg["valid_interval"],
+            callbacks=[checkpoint_callback],
+            logger=tb_logger
+        )
 
-    trainer.fit(model=module, train_dataloaders=module.test_loader, val_dataloaders=module.test_loader)
-    # trainer.test(model=module, dataloaders=module.test_loader)
+        trainer.fit(model=module, train_dataloaders=module.test_loader, val_dataloaders=module.test_loader)
+
+    elif cfg['phase'] == 'apply':
+        module.generate_poisoned_img(split='train')
+        # module.generate_poisoned_img(split='test')
+    else:
+        raise ValueError("Unknown phase {}".format(cfg['phase']))

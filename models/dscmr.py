@@ -98,6 +98,7 @@ def calc_label_sim(label_1, label_2):
 class DSCMR(pl.LightningModule):
     def __init__(self, cfg) -> None:
         super().__init__()
+        self.save_hyperparameters(cfg)
 
         # load config
         self.num_class = get_classes_num(cfg['dataset'])
@@ -299,9 +300,9 @@ def run(cfg):
         trainer.fit(model=module, train_dataloaders=train_loader, val_dataloaders=test_loader)
     
     ckpt = (cfg["checkpoint"] or os.path.join(checkpoint_dir, 'last.ckpt')) if cfg['phase'] == 'test' else 'best'
-    module.flogger.log("=> Tesing on clean data ...")
+    module.flogger.log("=> Testing on clean data ...")
     trainer.test(model=module, dataloaders=test_loader, ckpt_path=ckpt)
 
     if percentage > 0:
-        module.flogger.log("=> Tesing on poisoned data with poisoned pertentage {} ...".format(percentage))
+        module.flogger.log("=> Testing on poisoned data with poisoned pertentage {} ...".format(percentage))
         trainer.test(model=module, dataloaders=module.poi_test_loader, ckpt_path=ckpt)

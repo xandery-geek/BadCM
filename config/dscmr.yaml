@@ -6,7 +6,7 @@ checkpoint: null
 dataset: 'NUS-WIDE'
 text_embedding: 300
 batch_size: 128
-epochs: 100
+epochs: 50
 lr: 0.0001
 betas: [0.5, 0.999]
 device: '0'

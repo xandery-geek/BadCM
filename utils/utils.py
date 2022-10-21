@@ -31,9 +31,14 @@ def import_class(name):
     return mod
 
 
-def check_path(folder):
-    if not os.path.isdir(folder):
-        os.makedirs(folder)
+def check_path(path, isdir=True):
+    """
+    Check whether the `path` is exist.
+    isdir: `True` indicates the path is a directory, otherwise is a file.
+    """
+    path = '/'.join(path.split('/')[:-1]) if not isdir else path
+    if not os.path.isdir(path):
+        os.makedirs(path)
         
 
 def collect_outputs(outputs, key_list):

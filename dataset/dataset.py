@@ -60,7 +60,7 @@ class ImageMaskDataset(Dataset):
         with open(img_filepath, 'r') as f:
             self.imgs = [x.strip() for x in f]
         
-        self.masks = [get_mask_filename(x) for x in self.imgs]
+        self.masks = [replace_filepath(x) for x in self.imgs]
 
     def __getitem__(self, index):
         img = Image.open(os.path.join(self.data_path, self.imgs[index]))
@@ -159,9 +159,9 @@ def get_dataset_filename(split):
     return filename[split]
 
 
-def get_mask_filename(img_filename, mask_dir='masks'):
+def replace_filepath(img_filename, replaced_dir='masks'):
     split_idx = img_filename.find('/')
-    filename = mask_dir + img_filename[split_idx:]
+    filename = replaced_dir + img_filename[split_idx:]
     return filename
 
 

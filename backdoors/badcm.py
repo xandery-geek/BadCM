@@ -2,7 +2,8 @@ import os
 import numpy as np
 from torchvision import transforms
 from backdoors.base import BaseAttack
-from dataset.dataset import get_dataset_filename, get_mask_filename, CrossModalDataset
+from dataset.dataset import get_dataset_filename, replace_filepath
+from dataset.dataset import CrossModalDataset
 from torch.utils.data import DataLoader
 
 
@@ -19,7 +20,7 @@ class BadCMImageDataset(CrossModalDataset):
 
         for idx in self.poisoned_idx:
             # change image to poisoned image by BadCM
-            self.imgs[idx] = get_mask_filename(self.imgs[idx], mask_dir='badcm_images')
+            self.imgs[idx] = replace_filepath(self.imgs[idx], replaced_dir='badcm_images')
 
             # change label to poisoned target
             label = self.labels[idx]

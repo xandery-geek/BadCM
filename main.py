@@ -7,16 +7,18 @@ from utils.utils import import_class
 
 def parse_parameters():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--config_name', default='badcm.yaml', type=str, help='config file')
+    parser.add_argument('--config_name', default='dscmr.yaml', type=str, help='config file')
+    parser.add_argument('--checkpoint', default=None, type=str, help='model checkpoint')
     parser.add_argument('--device', type=str, default=None, help='gpu device')
     parser.add_argument('--dataset', type=str, default=None, choices=[None, 'FLICKR-25K', 'NUS-WIDE', 'IAPR-TC', 'MS-COCO'], help='dataset')
     parser.add_argument('--batch_size', type=int, default=None, help='batch size of dataset')
-    parser.add_argument('--phase', type=str, default=None, choices=[None, 'train', 'test'], help='phase')
+    parser.add_argument('--phase', type=str, default=None, choices=[None, 'train', 'test', 'apply'], help='phase')
     parser.add_argument('--epochs', type=int, default=None, help='train epochs')
     parser.add_argument('--lr', type=float, default=None, help='learning rate')
     parser.add_argument('-t', '--trial_tag', type=str, default=None, help='tag for differert trial')
 
     # arguments for backdoor attack
+    parser.add_argument('--attack', type=str, default=None, choices=[None, 'BadNets', 'BadCM'], help='backdoor attack method')
     parser.add_argument('--percentage', type=float, default=None, help='poison precentage')
 
     return parser.parse_args()
