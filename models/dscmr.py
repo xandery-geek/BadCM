@@ -130,8 +130,7 @@ class DSCMR(pl.LightningModule):
         # load model
         self.model = DSCMR_Net(self.embedding_dim, class_dim=self.num_class)
         
-        self.model_name = '{}_{}_p={}_t={}'.format(cfg['module_name'], cfg['dataset'], cfg['percentage'], cfg['trial_tag'])
-        self.flogger = FileLogger('log', '{}.log'.format(self.model_name))
+        self.flogger = FileLogger('log', '{}.log'.format(cfg['save_name']))
         self.flogger.log("=> Runing {} ...".format(cfg['module_name']))
 
         self.cfg = cfg
@@ -269,18 +268,22 @@ class DSCMR(pl.LightningModule):
 
 
 def run(cfg):
-    module = DSCMR(cfg)
 
     percentage = cfg['percentage']
-    save_dir = '{}_{}_p={}_t={}'.format(cfg['module_name'], cfg['dataset'], percentage, cfg['trial_tag'])
-    checkpoint_dir = 'checkpoints/' + save_dir
+    attack_method = 'Nomal' if percentage == 0 else cfg['attack']    
+    save_name = '{}_{}_{}_p={}_t={}'.format(cfg['module_name'], cfg['dataset'], attack_method, percentage, cfg['trial_tag'])
+    cfg['save_name'] = save_name
+
+    module = DSCMR(cfg)
+
+    checkpoint_dir = 'checkpoints/' + save_name
     checkpoint_callback = callbacks.ModelCheckpoint(
         monitor='val_map', 
         dirpath=checkpoint_dir,
         save_last=True,
         mode='max')
 
-    tb_logger = TensorBoardLogger('log/tensorboard', save_dir)
+    tb_logger = TensorBoardLogger('log/tensorboard', save_name)
     trainer = pl.Trainer(
         devices=len(cfg['device']),
         accelerator='gpu',

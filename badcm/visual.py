@@ -49,8 +49,7 @@ class VisualGenerator(pl.LightningModule):
             self.criterion_bad = torch.nn.CosineEmbeddingLoss()  # TODO: Change to the appropriate function
 
             # load file logger
-            self.model_name = '{}_{}_t={}'.format(cfg['module_name'], cfg['dataset'], cfg['trial_tag'])
-            self.flogger = FileLogger('log', '{}.log'.format(self.model_name))
+            self.flogger = FileLogger('log', '{}.log'.format(cfg['save_name']))
             self.flogger.log("=> Runing {} ...".format(cfg['module_name']))
 
         elif cfg['phase'] == 'apply':
@@ -127,9 +126,10 @@ class VisualGenerator(pl.LightningModule):
 
     def generate_ref_img(self, img):
         device = img.device
-        ref_img = deepcopy(img)
-        ref_img[:, :, -self.pattern_size:, -self.pattern_size:] = self.pattern_img.to(device)
+        # ref_img = deepcopy(img)
+        # ref_img[:, :, -self.pattern_size:, -self.pattern_size:] = self.pattern_img.to(device)
 
+        ref_img = 0.5 * img + 0.5 * self.pattern_img.to(device)
         return ref_img
 
     def sample_images(self, imgs_dict, step):
@@ -337,18 +337,20 @@ class VisualGenerator(pl.LightningModule):
 
 
 def run(cfg):
+    
+    save_name = '{}_{}_t={}'.format(cfg['module_name'], cfg['dataset'], cfg['trial_tag'])
+    cfg['save_name'] = save_name
     module = VisualGenerator(cfg)
 
     if cfg['phase'] == 'train':
-        save_dir = '{}_{}_t={}'.format(cfg['module_name'], cfg['dataset'], cfg['trial_tag'])
         checkpoint_callback = callbacks.ModelCheckpoint(
             monitor=None,
-            dirpath='checkpoints/' + save_dir,
+            dirpath='checkpoints/' + save_name,
             every_n_epochs=cfg["valid_interval"],
             save_last=True, 
             save_on_train_epoch_end=True)
 
-        tb_logger = TensorBoardLogger('log/tensorboard', save_dir)
+        tb_logger = TensorBoardLogger('log/tensorboard', save_name)
 
         trainer = pl.Trainer(
             devices=len(cfg['device']),
