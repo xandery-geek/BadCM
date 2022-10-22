@@ -2,61 +2,20 @@ import os
 import torch
 import numpy as np
 import torch.nn as nn
-import torch.nn.functional as F
 import pytorch_lightning as pl
-from torch.optim import lr_scheduler
+import torch.nn.functional as F
 from tqdm import tqdm
-from torchvision import models
+from torch.optim import lr_scheduler
 from torchtext.data import get_tokenizer
 from torchtext.vocab import GloVe
 from pytorch_lightning import callbacks
 from pytorch_lightning.loggers import TensorBoardLogger
-from dataset.dataset import get_data_loader, get_classes_num
-from utils.utils import import_class, collect_outputs
+from models.modules import VGGNet, TextCNN
+from models.loss import l2_loss
 from utils.utils import FileLogger
 from utils.metrics import cal_map
-
-
-class VGGNet(nn.Module):
-    """
-    VGG Net
-    """
-    def __init__(self):
-        """Select conv1_1 ~ conv5_1 activation maps."""
-        super(VGGNet, self).__init__()
-        self.vgg = models.vgg19_bn(pretrained=True)
-        self.vgg_features = self.vgg.features
-        self.fc_features = nn.Sequential(*list(self.vgg.classifier.children())[:-2])
-
-    def forward(self, x):
-        """Extract multiple convolutional feature maps."""
-        feats = self.vgg_features(x).view(x.shape[0], -1)
-        feats = self.fc_features(feats)
-        return feats
-
-
-class TextCNN(nn.Module):
-    """
-    Paper: [Convolutional Neural Networks for Sentence Classification](https://arxiv.org/abs/1408.5882)
-    Code Reference: https://github.com/bentrevett/pytorch-sentiment-analysis/blob/master/4%20-%20Convolutional%20Sentiment%20Analysis.ipynb
-    """
-    def __init__(self, embedding_dim, n_filters=100, filter_sizes=(3, 4, 5), dropout=0.5):
-        super().__init__()
-        
-        self.convs = nn.ModuleList([nn.Conv2d(in_channels=1, out_channels=n_filters, kernel_size=(fs, embedding_dim)) 
-                                    for fs in filter_sizes
-                                    ])
-        
-        self.dropout = nn.Dropout(dropout)
-        self.txt_dim = n_filters * len(filter_sizes)
-    
-    def forward(self, text):
-        embedded = text.unsqueeze(1) # (batch size, 1, sent len, emb dim)
-        conved = [F.relu(conv(embedded)).squeeze(3) for conv in self.convs]  # (batch size, n_filters, sent len - filter_sizes[n] + 1)
-        pooled = [F.max_pool1d(conv, conv.shape[2]).squeeze(2) for conv in conved]  # (batch size, n_filters)    
-        feats = torch.cat(pooled, dim = 1)  # (batch size, n_filters * len(filter_sizes))
-        feats = self.dropout(feats)
-        return feats
+from utils.utils import import_class, collect_outputs
+from dataset.dataset import get_data_loader, get_classes_num
 
 
 class DSCMR_Net(nn.Module):
@@ -70,14 +29,13 @@ class DSCMR_Net(nn.Module):
         self.img_net = VGGNet()
         self.txt_net = TextCNN(embedding_dim)
 
-        txt_input_dim = self.txt_net.txt_dim
+        txt_input_dim = self.txt_net.feats_dim
 
-        self.img_linear = nn.Linear(img_input_dim, output_dim)
-        self.txt_linear = nn.Linear(txt_input_dim, output_dim)
+        self.img_linear = nn.Sequential(nn.Linear(img_input_dim, output_dim), nn.ReLU()) 
+        self.txt_linear = nn.Sequential(nn.Linear(txt_input_dim, output_dim), nn.ReLU())
 
         self.feature_linear = nn.Linear(output_dim, feature_dim)
         self.classifier = nn.Linear(feature_dim, class_dim)
-        self.relu = nn.ReLU()
     
     def forward(self, img, text):
         img_feats = self.img_net(img)
@@ -88,11 +46,6 @@ class DSCMR_Net(nn.Module):
         img_pred = self.classifier(img_feats)
         txt_pred = self.classifier(txt_feats)
         return img_feats, txt_feats, img_pred, txt_pred
-
-
-def calc_label_sim(label_1, label_2):
-    sim = label_1 @ label_2.t()
-    return sim
 
 
 class DSCMR(pl.LightningModule):
@@ -151,20 +104,21 @@ class DSCMR(pl.LightningModule):
 
     @staticmethod
     def loss(v1_feats, v2_feats, v1_pred, v2_pred, label, alpha=1e-3, beta=1e-1):
-        term1 = ((v1_pred-label.float())**2).sum(1).sqrt().mean() + ((v2_pred-label.float())**2).sum(1).sqrt().mean()
+        label = label.float()
 
-        cos = lambda x, y: x.mm(y.t()) / ((x ** 2).sum(1, keepdim=True).sqrt().mm((y ** 2).sum(1, keepdim=True).sqrt().t())).clamp(min=1e-6) / 2.
-        theta11 = cos(v1_feats, v1_feats)
-        theta12 = cos(v1_feats, v2_feats)
-        theta22 = cos(v2_feats, v2_feats)
+        term1 = l2_loss(v1_pred, label, reduction='mean') + l2_loss(v2_pred, label, reduction='mean')
+
+        theta11 = F.cosine_similarity(v1_feats, v1_feats) / 2.0
+        theta12 = F.cosine_similarity(v1_feats, v2_feats) / 2.0
+        theta22 = F.cosine_similarity(v2_feats, v2_feats) / 2.0
         
-        sim = calc_label_sim(label, label).float()
+        sim = label @ label.t()
         term21 = ((1+torch.exp(theta11)).log() - sim * theta11).mean()
         term22 = ((1+torch.exp(theta12)).log() - sim * theta12).mean()
         term23 = ((1 + torch.exp(theta22)).log() - sim * theta22).mean()
         term2 = term21 + term22 + term23
 
-        term3 = ((v1_feats - v2_feats)**2).sum(1).sqrt().mean()
+        term3 = l2_loss(v1_feats, v2_feats, reduction='mean')
 
         ret = term1 + alpha * term2 + beta * term3
         return ret
@@ -184,8 +138,9 @@ class DSCMR(pl.LightningModule):
         return np.concatenate(img_list), np.concatenate(txt_list), np.concatenate(label_list)
         
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=self.cfg['lr'], betas=self.cfg['betas'])
-        scheduler = lr_scheduler.CosineAnnealingLR(optimizer, self.cfg['epochs'])
+        lr = self.cfg['lr']
+        optimizer = torch.optim.Adam(self.model.parameters(), lr=lr, betas=self.cfg['betas'])
+        scheduler = lr_scheduler.CosineAnnealingLR(optimizer, self.cfg['epochs'], eta_min=0.1 * lr)
         return {
             "optimizer": optimizer,
             "lr_scheduler": {

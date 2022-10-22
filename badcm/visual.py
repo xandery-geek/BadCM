@@ -201,7 +201,7 @@ class VisualGenerator(pl.LightningModule):
             if self.cfg['perturbation']:
                 zero_img = torch.zeros(per_img.size(), dtype=per_img.dtype, device=per_img.device)
                 loss_rec = self.criterion_rec(per_img, zero_img)
-                # loss_rec = loss_rec + self.loss_region * self.criterion_rec(per_img * (1 - mask), zero_img * (1- mask))
+                loss_rec = loss_rec + self.loss_region * self.criterion_rec(per_img * (1 - mask), zero_img * (1- mask))
             else:
                 loss_rec = self.criterion_rec(poi_img, img)
                 loss_rec = loss_rec + self.loss_region * self.criterion_rec(poi_img * (1 - mask), img * (1- mask))
@@ -363,10 +363,12 @@ def run(cfg):
             logger=tb_logger
         )
 
-        trainer.fit(model=module, train_dataloaders=module.test_loader, val_dataloaders=module.test_loader)
+        trainer.fit(model=module, train_dataloaders=module.train_loader, val_dataloaders=module.test_loader)
 
     elif cfg['phase'] == 'apply':
+        print("Generating poisoned images for train dataset")
         module.generate_poisoned_img(split='train')
-        # module.generate_poisoned_img(split='test')
+        print("Generating poisoned images for test dataset")
+        module.generate_poisoned_img(split='test')
     else:
         raise ValueError("Unknown phase {}".format(cfg['phase']))
