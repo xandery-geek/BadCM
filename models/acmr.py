@@ -50,7 +50,10 @@ class ACMR_Net(nn.Module):
 
         self.img_projector, self.txt_projector = nn.Sequential(*img_projector), nn.Sequential(*txt_projector)
 
-        self.classifier = nn.Linear(feature_dim, class_dim)
+        self.classifier = nn.Sequential(
+            nn.Linear(feature_dim, class_dim),
+            nn.Sigmoid()
+        )
 
         self.domain_classifier = nn.Sequential(
             RevGradLayer(),
@@ -144,30 +147,46 @@ class ACMR(pl.LightningModule):
     def loss(v1_feats, v2_feats, v1_pred, v2_pred, v1_domain, v2_domain, label, margin=1.0):
 
         sim = label @ label.t()
-        zero_tensor = torch.tensor(0, dtype=sim.dtype, device=sim.device)
-        neg_samples = torch.where((1 - sim) == 1, 1-sim, zero_tensor)
+        pos_samples = (sim > 0).float()
+        neg_samples = 1 - pos_samples
 
+        # pick hard negative samples
         with torch.no_grad():
-            v1_sim = F.cosine_similarity(v1_feats, v1_feats)
-            v1_sim_neg = neg_samples * v1_sim
-            v1_neg_idx = torch.argmax(v1_sim_neg, dim=1)
+            cos_sim = F.cosine_similarity(v1_feats, v2_feats)
+            neg_cos_sim = neg_samples * cos_sim
+            v1_neg_idx = torch.argmax(neg_cos_sim, dim=1)
+            v2_neg_idx = torch.argmax(neg_cos_sim, dim=0)
 
-            v2_sim = F.cosine_similarity(v2_feats, v2_feats)
-            v2_sim_neg = neg_samples * v2_sim
-            v2_neg_idx = torch.argmax(v2_sim_neg, dim=1)
+        triplet_loss = 0
+        batch_size = len(v1_feats)
+        for i in range(batch_size):
+            pos_idx = torch.where(pos_samples[i]==1)[0]
+            num_pos = len(pos_idx)
 
-        label_loss = F.cross_entropy(v1_pred, label) + F.cross_entropy(v2_pred, label)
+            triplet_loss += F.triplet_margin_loss(
+                v1_feats[i].repeat(num_pos, 1),
+                v2_feats[pos_idx],
+                v2_feats[v1_neg_idx[i]].repeat(num_pos, 1),
+                margin=margin
+            ) + F.triplet_margin_loss(
+                v2_feats[i].repeat(num_pos, 1),
+                v1_feats[pos_idx],
+                v1_feats[v2_neg_idx[i]].repeat(num_pos, 1),
+                margin=margin
+            )
 
-        triplet_loss = F.triplet_margin_loss(v1_feats, v2_feats, v2_feats[v2_neg_idx], margin=margin) + \
-                        F.triplet_margin_loss(v2_feats, v1_feats, v1_feats[v1_neg_idx], margin=margin)
+        triplet_loss /= batch_size
 
         v1_target = torch.zeros(size=v1_domain.size(), dtype=v1_domain.dtype, device=v1_domain.device)
         v2_target = torch.ones(size=v2_domain.size(), dtype=v2_domain.dtype, device=v2_domain.device)
 
+        label_loss = F.binary_cross_entropy(v1_pred, label) + \
+                        F.binary_cross_entropy(v2_pred, label)
+
         domain_loss = F.binary_cross_entropy(v1_domain, v1_target) + \
                         F.binary_cross_entropy(v2_domain, v2_target)
 
-        loss = 0.1 *label_loss + triplet_loss + domain_loss
+        loss = triplet_loss + 0.5 * label_loss + 0.5 * domain_loss
         return loss, label_loss, triplet_loss, domain_loss
 
     @staticmethod

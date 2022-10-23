@@ -7,7 +7,7 @@ dataset: 'NUS-WIDE'
 max_text_len: 40
 text_embedding: 300
 batch_size: 128
-epochs: 50
+epochs: 100
 lr: 0.0001
 betas: [0.5, 0.999]
 device: '0'
