@@ -15,7 +15,6 @@ from dataset.dataset import ImageMaskDataset
 from utils.utils import collect_outputs, check_path
 from utils.utils import FileLogger
 
-
 class VisualGenerator(pl.LightningModule):
     def __init__(self, cfg) -> None:
         super().__init__()
@@ -144,12 +143,11 @@ class VisualGenerator(pl.LightningModule):
                     # img = unnormalize(img, mean, std)
                 self.logger.experiment.add_image(name, img, step, dataformats='NCHW')
         else:
-            name = 'poi_img'
-            img = imgs_dict[name]
-            # img = unnormalize(img, mean, std)
-            self.logger.experiment.add_image(name, img, step, dataformats='NCHW')
+            for name in ['poi_img', 'err_img']:
+                img = imgs_dict[name]
+                # img = unnormalize(img, mean, std)
+                self.logger.experiment.add_image(name, img, step, dataformats='NCHW')
             
-
     def configure_optimizers(self):
         optim_cfg = self.cfg['optim']
 
@@ -280,10 +278,13 @@ class VisualGenerator(pl.LightningModule):
         bad_loss2 = self.criterion_bad(feats_ori, feats_ref, torch.ones(feats_poi.size(0)).to(feats_poi.device))
 
         if self.global_rank == 0 and batch_idx == self.sample_batch:
+            ori_img = img[:4].cpu()
+            poi_img = poi_img[:4].detach().cpu()
+            err_img = torch.clamp(20 * torch.abs(ori_img - poi_img), 0, 1)
             self.sample_images({
-                "ori_img": img[:4].cpu(),
+                "poi_img": poi_img,
+                "err_img": err_img,
                 "mask_img": mask[:4].cpu(),
-                "poi_img": poi_img[:4].detach().cpu(),
                 "ref_img": ref_img[:4].cpu(),
             }, step=self.current_epoch)
 

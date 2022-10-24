@@ -219,7 +219,7 @@ class ACMR(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         img, text, label = batch
         outputs = self.model(img, text)
-        loss, label_loss, triplet_loss, domain_loss = self.loss(*outputs, label, alpha=0.2, beta=0.2)
+        loss, label_loss, triplet_loss, domain_loss = self.loss(*outputs, label, alpha=0.5, beta=0.2)
 
         return {"loss": loss, 'label': label_loss, 'triplet': triplet_loss, 'domain': domain_loss}
 
