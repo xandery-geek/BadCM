@@ -144,7 +144,8 @@ class ACMR(pl.LightningModule):
         return img_list, text_list, label_list
 
     @staticmethod
-    def loss(v1_feats, v2_feats, v1_pred, v2_pred, v1_domain, v2_domain, label, margin=1.0):
+    def loss(v1_feats, v2_feats, v1_pred, v2_pred, v1_domain, v2_domain, label, 
+                margin=1.0, alpha=1.0, beta=1.0):
 
         sim = label @ label.t()
         pos_samples = (sim > 0).float()
@@ -186,7 +187,7 @@ class ACMR(pl.LightningModule):
         domain_loss = F.binary_cross_entropy(v1_domain, v1_target) + \
                         F.binary_cross_entropy(v2_domain, v2_target)
 
-        loss = triplet_loss + 0.5 * label_loss + 0.5 * domain_loss
+        loss = triplet_loss + alpha * label_loss + beta * domain_loss
         return loss, label_loss, triplet_loss, domain_loss
 
     @staticmethod
@@ -218,7 +219,7 @@ class ACMR(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         img, text, label = batch
         outputs = self.model(img, text)
-        loss, label_loss, triplet_loss, domain_loss = self.loss(*outputs, label)
+        loss, label_loss, triplet_loss, domain_loss = self.loss(*outputs, label, alpha=0.2, beta=0.2)
 
         return {"loss": loss, 'label': label_loss, 'triplet': triplet_loss, 'domain': domain_loss}
 

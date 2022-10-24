@@ -1,4 +1,5 @@
 # BadCM
+> Offical implement of ...
 
 ## Setup
 
@@ -61,8 +62,43 @@ python -m badcm.critical_regions --dataset MS-COCO --modal text
 ## Train
 
 ### Train BadCM
-```shell
 
+For Visual Generator
+
+```shell
+python main.py --config_name visual.yaml --dataset MS-COCO
+```
+
+For Textual Genrator
+```shell
+python main.py --config_name textual.yaml --dataset MS-COCO
+```
+
+### Generate Poisoned Dataset
+
+Poison Images
+```shell
+python main.py --config_name visual.yaml --dataset MS-COCO --phase apply
+```
+
+Poison Texts
+```shell
+python main.py --config_name textual.yaml --dataset MS-COCO --phase apply
 ```
 
 ## Validation
+
+Train different cross-modal models with clean dataset
+```shell
+python main.py --config_name [dscmr.yaml or acmr.yaml]
+```
+
+Train under BadNets attack
+```shell
+python main.py --config_name [dscmr.yaml or acmr.yaml] --attack BadNets --percentage 0.1
+```
+
+Train under BadCM(our method) attack
+```shell
+python main.py --config_name [dscmr.yaml or acmr.yaml] --attack BadCM --percentage 0.1
+```

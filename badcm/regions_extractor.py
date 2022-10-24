@@ -261,6 +261,7 @@ def visualization(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument('--device', default='0', type=str, help='device id')
     parser.add_argument('--cfg_name', default='X-152', type=str, help='congfig file for detectron')
     parser.add_argument('--data_path', default='../data', type=str, help='path of dataset')
     parser.add_argument('--dataset', type=str, default='NUS-WIDE', choices=['FLICKR-25K', 'NUS-WIDE', 'IAPR-TC', 'MS-COCO'], help='dataset')
@@ -270,7 +271,8 @@ if __name__ == "__main__":
     parser.add_argument('-v', '--visualization', action='store_true', default=False, help='visualization')
 
     args = parser.parse_args()
-
+    
+    os.environ["CUDA_VISIBLE_DEVICES"] = args.device
     if args.visualization:
         visualization(args)
     else:

@@ -15,7 +15,7 @@ def parse_parameters():
     parser.add_argument('--phase', type=str, default=None, choices=[None, 'train', 'test', 'apply'], help='phase')
     parser.add_argument('--epochs', type=int, default=None, help='train epochs')
     parser.add_argument('--lr', type=float, default=None, help='learning rate')
-    parser.add_argument('-t', '--trial_tag', type=str, default=None, help='tag for differert trial')
+    parser.add_argument('-t', '--trial_tag', type=str, default=None, help='tag for different trial')
 
     # arguments for backdoor attack
     parser.add_argument('--attack', type=str, default=None, choices=[None, 'BadNets', 'BadCM'], help='backdoor attack method')

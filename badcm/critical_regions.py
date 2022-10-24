@@ -321,6 +321,7 @@ class CriricalRegionExtractor():
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument('--device', default='0', type=str, help='device id')
     parser.add_argument('--modal', default='image', type=str, choices=['image', 'text'], help='modal')
     parser.add_argument('--split', default='train', type=str, choices=['test', 'train', 'database'], help='dataset split')
     parser.add_argument('--config_name', default='vilt.yaml', type=str, help='congfig file for vilt')
@@ -336,5 +337,6 @@ if __name__ == "__main__":
 
     setattr(args, 'cfg', cfg)
 
+    os.environ["CUDA_VISIBLE_DEVICES"] = args.device
     extractor = CriricalRegionExtractor(args)
     extractor.extract_regions(modal=args.modal)
