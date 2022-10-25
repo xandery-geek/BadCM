@@ -1,0 +1,5 @@
+config_name: 'textual.yaml'
+data_path: '../data'
+module: badcm.textual
+dataset: 'NUS-WIDE'
+mlm_path: 'bert-base-uncased'

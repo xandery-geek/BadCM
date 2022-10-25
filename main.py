@@ -5,6 +5,28 @@ import torch
 from utils.utils import import_class
 
 
+def str2bool(v: str) -> bool:
+    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+        return True
+    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Unsupported value encountered.')
+
+
+def str2list(v: str) -> list:
+    """
+    convert string to list
+    '[0, 1, 2, ...]' - > [0, 1, 2, ...]
+    """
+    try:
+        v = v[1:-1]
+        v = [int(i.strip()) for i in v.split(',')]
+        return v
+    except:
+        raise argparse.ArgumentTypeError('Unsupported value encountered.')
+
+
 def parse_parameters():
     parser = argparse.ArgumentParser()
     parser.add_argument('--config_name', default='dscmr.yaml', type=str, help='config file')
@@ -20,6 +42,7 @@ def parse_parameters():
     # arguments for backdoor attack
     parser.add_argument('--attack', type=str, default=None, choices=[None, 'BadNets', 'BadCM'], help='backdoor attack method')
     parser.add_argument('--percentage', type=float, default=None, help='poison precentage')
+    parser.add_argument('--target', type=str2list, default=None, help='poison target')
 
     return parser.parse_args()
 

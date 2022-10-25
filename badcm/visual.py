@@ -15,6 +15,7 @@ from dataset.dataset import ImageMaskDataset
 from utils.utils import collect_outputs, check_path
 from utils.utils import FileLogger
 
+
 class VisualGenerator(pl.LightningModule):
     def __init__(self, cfg) -> None:
         super().__init__()
@@ -110,9 +111,14 @@ class VisualGenerator(pl.LightningModule):
     
     def load_pattern_img(self):
         pattern_cfg = self.cfg['pattern_img']
+        self.pattern_mode = pattern_cfg['mode']
+        assert self.pattern_mode in ['patch', 'blend', 'soild']
+
+        size = pattern_cfg['size']
+        if self.pattern_mode == 'solid':
+            assert size == self.cfg['image_size']
 
         img = Image.open(pattern_cfg['path'])
-        size = pattern_cfg['size']
         img = img.resize((size, size))
 
         transform = transforms.Compose([
@@ -125,27 +131,25 @@ class VisualGenerator(pl.LightningModule):
 
     def generate_ref_img(self, img):
         device = img.device
-        # ref_img = deepcopy(img)
-        # ref_img[:, :, -self.pattern_size:, -self.pattern_size:] = self.pattern_img.to(device)
 
-        ref_img = 0.5 * img + 0.5 * self.pattern_img.to(device)
+        if self.pattern_mode == 'blend':
+            ref_img = 0.5 * img + 0.5 * self.pattern_img.to(device)
+        else:
+            ref_img = deepcopy(img)
+            ref_img[:, :, -self.pattern_size:, -self.pattern_size:] = self.pattern_img.to(device)
         return ref_img
 
-    def sample_images(self, imgs_dict, step):
+    def sample_images(self, img_data, step):
         mean, std = (0.485, 0.456, 0.406), (0.229, 0.224, 0.225)
 
         mean = torch.tensor(list(mean))
         std = torch.tensor(list(std))
         
-        if step == 0:
-            for name, img in imgs_dict.items():
+        for data in img_data:
+            if data['step'] == step or data['step'] == -1:
+                name, img = data['name'], data['img']
                 # if name != 'mask_img':
                     # img = unnormalize(img, mean, std)
-                self.logger.experiment.add_image(name, img, step, dataformats='NCHW')
-        else:
-            for name in ['poi_img', 'err_img']:
-                img = imgs_dict[name]
-                # img = unnormalize(img, mean, std)
                 self.logger.experiment.add_image(name, img, step, dataformats='NCHW')
             
     def configure_optimizers(self):
@@ -280,13 +284,13 @@ class VisualGenerator(pl.LightningModule):
         if self.global_rank == 0 and batch_idx == self.sample_batch:
             ori_img = img[:4].cpu()
             poi_img = poi_img[:4].detach().cpu()
-            err_img = torch.clamp(20 * torch.abs(ori_img - poi_img), 0, 1)
-            self.sample_images({
-                "poi_img": poi_img,
-                "err_img": err_img,
-                "mask_img": mask[:4].cpu(),
-                "ref_img": ref_img[:4].cpu(),
-            }, step=self.current_epoch)
+            err_img = torch.clamp(10 * torch.abs(ori_img - poi_img), 0, 1)
+            self.sample_images([
+                {"name": "poi_img", "img": poi_img, "step": -1},
+                {"name": "err_img", "img": err_img, "step": -1},
+                {"name": "mask_img", "img": mask[:4].cpu(), "step": 0},
+                {"name": "ref_img", "img": ref_img[:4].cpu(), "step": 0},
+            ], step=self.current_epoch)
 
         return {"rec_loss": rec_loss, 'bad_loss': bad_loss2 - bad_loss1}
 

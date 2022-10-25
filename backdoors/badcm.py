@@ -8,9 +8,9 @@ from torch.utils.data import DataLoader
 
 
 class BadCMImageDataset(CrossModalDataset):
-    def __init__(self, data_path, img_filename, tag_filename, label_filename, transform=None, 
+    def __init__(self, data_path, img_filename, text_filename, label_filename, transform=None, 
                 p=0., poisoned_target=[]):
-        super().__init__(data_path, img_filename, tag_filename, label_filename, transform)
+        super().__init__(data_path, img_filename, text_filename, label_filename, transform)
 
         self.p = p
         self.poisoned_target = poisoned_target
@@ -30,9 +30,9 @@ class BadCMImageDataset(CrossModalDataset):
 
 
 class BadCMTextDataset(CrossModalDataset):
-    def __init__(self, data_path, img_filename, tag_filename, label_filename, transform=None, 
+    def __init__(self, data_path, img_filename, text_filename, label_filename, transform=None, 
                 p=0., poisoned_target=[]):
-        super().__init__(data_path, img_filename, tag_filename, label_filename, transform)
+        super().__init__(data_path, img_filename, text_filename, label_filename, transform)
 
         self.p = p
         self.poisoned_target = poisoned_target
@@ -41,14 +41,14 @@ class BadCMTextDataset(CrossModalDataset):
         self.poisoned_idx = np.random.permutation(num_data)[0: int(num_data * self.p)]
         
         if len(self.poisoned_idx) > 0:
-            tag_filepath = os.path.join(data_path, 'badcm_texts' , tag_filename)
-            with open(tag_filepath, 'r') as f:
-                self.poisoned_tags = f.readlines()
-            self.poisoned_tags = [i.replace('\n', '') for i in self.poisoned_tags]
+            text_filepath = os.path.join(data_path, 'badcm_texts' , text_filename)
+            with open(text_filepath, 'r') as f:
+                self.poisoned_texts = f.readlines()
+            self.poisoned_texts = [i.replace('\n', '') for i in self.poisoned_texts]
 
         for idx in self.poisoned_idx:
             # change text to poisoned text by BadCM
-            self.tags[idx] = self.poisoned_tags[idx]
+            self.texts[idx] = self.poisoned_texts[idx]
 
             # change label to poisoned target
             label = self.labels[idx]

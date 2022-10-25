@@ -94,7 +94,7 @@ class CriricalRegionExtractor():
             critical_words[np.array(words_idx)] = 1
             text_mask.append(critical_words)
         
-        self.words_visualization(self.dataset.imgs, self.dataset.tags, text_mask, 
+        self.words_visualization(self.dataset.imgs, self.dataset.texts, text_mask, 
                                     save_filename='log/regions/{}-{}-mask.html'.format(self.args.dataset, self.args.split))
         self.save_text_mask(text_mask)
 

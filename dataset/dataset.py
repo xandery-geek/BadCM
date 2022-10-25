@@ -79,8 +79,36 @@ class ImageMaskDataset(Dataset):
         return len(self.imgs)
 
 
+class TextMaskDataset(Dataset):
+    def __init__(self, data_path, text_filename, mask_filename='text_mask.npy'):
+        self.data_path = data_path
+        
+        text_filepath = os.path.join(data_path, text_filename)
+        if text_filepath.endswith('.npy'):
+            self.texts = np.load(text_filepath)
+            self.text_type = 'onehot'
+        else:
+            with open(text_filepath, 'r') as f:
+                self.texts = f.readlines()
+            self.texts = [i.replace('\n', '') for i in self.texts]
+            self.text_type = 'str'
+        
+        mask_filepath = os.path.join(data_path, mask_filename)
+        self.masks = np.load(mask_filepath)
+
+        assert len(self.texts) == len(self.masks)
+
+    def __getitem__(self, index):
+        text = self.texts[index]
+        mask = self.masks[index]
+        return text, mask
+
+    def __len__(self):
+        return len(self.texts)
+
+
 class CrossModalDataset(Dataset):
-    def __init__(self, data_path, img_filename, tag_filename, label_filename, transform=None):
+    def __init__(self, data_path, img_filename, text_filename, label_filename, transform=None):
         self.data_path = data_path
 
         if transform is None:
@@ -97,15 +125,15 @@ class CrossModalDataset(Dataset):
         with open(img_filepath, 'r') as f:
             self.imgs = [x.strip() for x in f]
 
-        tag_filepath = os.path.join(data_path, tag_filename)
-        if tag_filepath.endswith('.npy'):
-            self.tags = np.load(tag_filepath)
-            self.tag_type = 'onehot'
+        text_filepath = os.path.join(data_path, text_filename)
+        if text_filepath.endswith('.npy'):
+            self.texts = np.load(text_filepath)
+            self.text_type = 'onehot'
         else:
-            with open(tag_filepath, 'r') as f:
-                self.tags = f.readlines()
-            self.tags = [i.replace('\n', '') for i in self.tags]
-            self.tag_type = 'str'
+            with open(text_filepath, 'r') as f:
+                self.texts = f.readlines()
+            self.texts = [i.replace('\n', '') for i in self.texts]
+            self.text_type = 'str'
 
         label_filepath = os.path.join(data_path, label_filename)
         self.labels = np.genfromtxt(label_filepath, dtype=np.int32)
@@ -117,10 +145,10 @@ class CrossModalDataset(Dataset):
             img = self.transform(img)
         label = torch.from_numpy(self.labels[index]).float()
 
-        tag = self.tags[index]
-        if self.tag_type == 'onehot':
-            tag = torch.from_numpy(tag).float() 
-        return img, tag, label
+        text = self.texts[index]
+        if self.text_type == 'onehot':
+            text = torch.from_numpy(text).float() 
+        return img, text, label
 
     def __len__(self):
         return len(self.imgs)
@@ -186,6 +214,8 @@ def get_data_loader(data_dir, dataset_name, split, transform=None, batch_size=32
         dataset = dataset_cls(data_path, img_name, transform=transform)
     elif dataset_cls == ImageMaskDataset:
         dataset = dataset_cls(data_path, img_name, transform=transform)
+    elif dataset_cls == TextMaskDataset:
+        dataset = dataset_cls(data_path, text_name)
     else:
         dataset = dataset_cls(data_path, img_name, text_name, label_name, transform=transform)
 

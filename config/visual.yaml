@@ -6,6 +6,7 @@ checkpoint: null
 dataset: 'NUS-WIDE'
 image_size: 384
 pattern_img:
+  mode: 'blend'  # choose from ['patch', 'blend', 'solid']
   path: 'config/pattern.jpg'
   size: 384
 transformer_path: 'checkpoints/vit/vit_base_patch32_384.ckpt'
