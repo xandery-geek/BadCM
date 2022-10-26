@@ -178,8 +178,7 @@ class VisualGenerator(pl.LightningModule):
     
     def forward(self, img, mask):
         if self.cfg['perturbation']:
-            per_img = self.generator(img, mask)
-            per_img = torch.clamp(per_img, -self.cfg['epislon'], self.cfg['epislon'])
+            per_img = self.cfg['epislon'] * self.generator(img, mask)
             poi_img = img + per_img
             poi_img = torch.clamp(poi_img, 0, 1)
         else:
@@ -274,25 +273,25 @@ class VisualGenerator(pl.LightningModule):
         rec_loss = self.criterion_rec(poi_img, img)
 
         ref_img = self.generate_ref_img(img)
-        feats_ori = self.feature_extractor(img).flatten(start_dim=1)
+        # feats_ori = self.feature_extractor(img).flatten(start_dim=1)
         feats_poi = self.feature_extractor(poi_img).flatten(start_dim=1)
         feats_ref = self.feature_extractor(ref_img).flatten(start_dim=1)
 
-        bad_loss1 = self.criterion_bad(feats_poi, feats_ref, torch.ones(feats_poi.size(0)).to(feats_poi.device))
-        bad_loss2 = self.criterion_bad(feats_ori, feats_ref, torch.ones(feats_poi.size(0)).to(feats_poi.device))
+        bad_loss = self.criterion_bad(feats_poi, feats_ref, torch.ones(feats_poi.size(0)).to(feats_poi.device))
+        # bad_loss2 = self.criterion_bad(feats_ori, feats_ref, torch.ones(feats_poi.size(0)).to(feats_poi.device))
 
         if self.global_rank == 0 and batch_idx == self.sample_batch:
-            ori_img = img[:4].cpu()
-            poi_img = poi_img[:4].detach().cpu()
+            ori_img = img[:5].cpu()
+            poi_img = poi_img[:5].detach().cpu()
             err_img = torch.clamp(10 * torch.abs(ori_img - poi_img), 0, 1)
             self.sample_images([
                 {"name": "poi_img", "img": poi_img, "step": -1},
                 {"name": "err_img", "img": err_img, "step": -1},
-                {"name": "mask_img", "img": mask[:4].cpu(), "step": 0},
-                {"name": "ref_img", "img": ref_img[:4].cpu(), "step": 0},
+                {"name": "mask_img", "img": mask[:5].cpu(), "step": 0},
+                {"name": "ref_img", "img": ref_img[:5].cpu(), "step": 0},
             ], step=self.current_epoch)
 
-        return {"rec_loss": rec_loss, 'bad_loss': bad_loss2 - bad_loss1}
+        return {"rec_loss": rec_loss, 'bad_loss': bad_loss}
 
     def validation_epoch_end(self, outputs):
         batch_size = len(outputs)
@@ -351,9 +350,9 @@ def run(cfg):
         checkpoint_callback = callbacks.ModelCheckpoint(
             monitor=None,
             dirpath='checkpoints/' + save_name,
-            every_n_epochs=cfg["valid_interval"],
+            every_n_epochs=1,
             save_last=True, 
-            save_on_train_epoch_end=True)
+            save_on_train_epoch_end=False)
 
         tb_logger = TensorBoardLogger('log/tensorboard', save_name)
 

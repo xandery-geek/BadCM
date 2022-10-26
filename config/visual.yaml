@@ -13,15 +13,15 @@ transformer_path: 'checkpoints/0-feature_extractor/visual_base_patch32_384.ckpt'
 batch_size: 32
 epochs: 200
 perturbation: true  # generate perturbation directly or poisoned image
-epislon: 0.1
+epislon: 0.5
 optim:
   optimizer: 'adam'
   lr: 0.0002
   betas: [0.5, 0.999]
 loss:
-  region: 0.2
+  region: 0.3
   alpha: 0.05
-  beta: 1.0
+  beta: 2.0
 device: '0'
 valid_interval: 10
 sample_batch: 0  # -1 for disable sample images

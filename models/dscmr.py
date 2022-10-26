@@ -173,8 +173,9 @@ class DSCMR(pl.LightningModule):
 
         lr = self.optimizers().param_groups[0]['lr']
         self.log("lr", lr, prog_bar=True, on_step=False, on_epoch=True)
+        self.log("loss", loss, prog_bar=False, on_step=False, on_epoch=True)
         
-        self.flogger.log("train loss: {:.5f}, img_corrects: {:.2f}, txt_corrects: {:.2f}".
+        print("train loss: {:.5f}, img_corrects: {:.2f}, txt_corrects: {:.2f}".
                             format(loss, img_corrects, txt_corrects))
 
     def validation_step(self, batch, batch_idx):
@@ -194,9 +195,9 @@ class DSCMR(pl.LightningModule):
         img2txt = cal_map(img_feats, label, txt_feats, label, dist_method='cosine')
         txt2img = cal_map(txt_feats, label, img_feats, label, dist_method='cosine')
 
-        self.flogger.log('`Img2Txt`: {:.4f}  `Txt2Img`: {:.4f}'.format(img2txt, txt2img))
+        print('`Img2Txt`: {:.4f}  `Txt2Img`: {:.4f}'.format(img2txt, txt2img))
         val_map = (img2txt + txt2img)/2
-        self.log('val_map', value=val_map)
+        self.log('val_map', value=val_map, on_step=False, on_epoch=True)
     
     def test_step(self, batch, batch_idx):
         img, text, label = batch
@@ -212,13 +213,13 @@ class DSCMR(pl.LightningModule):
         test_img, test_txt, test_label = np.concatenate(test_img), np.concatenate(test_txt), np.concatenate(test_label)
 
         # generate outputs of database_loader
-        self.flogger.log("=> Generating features of database")
+        print("=> Generating features of database")
         database_img, database_txt, database_label = self.generate_feature(self.model, self.database_loader)
         
         img2txt = cal_map(test_img, test_label, database_txt, database_label, dist_method='cosine')
         txt2img = cal_map(test_txt, test_label, database_img, database_label, dist_method='cosine')
 
-        self.flogger.log("Number of query: {}, Number of database: {}".format(len(test_label), len(database_label)))
+        print("Number of query: {}, Number of database: {}".format(len(test_label), len(database_label)))
         self.flogger.log('Img2Txt: {:.4f}  Txt2Img: {:.4f}'.format(img2txt, txt2img))
 
 
@@ -253,7 +254,7 @@ def run(cfg):
     test_loader = module.test_loader
 
     if cfg['phase'] == 'train':
-        module.flogger.log("=> Training on poisoned data with poisoned pertentage {} ...".format(percentage))
+        module.flogger.log("=> Training on poisoned data with p={} and target={}".format(percentage, cfg['target']))
         trainer.fit(
             model=module, 
             ckpt_path=cfg["checkpoint"], 
@@ -264,7 +265,7 @@ def run(cfg):
     ckpt = (cfg["checkpoint"] or os.path.join(checkpoint_dir, 'last.ckpt')) if cfg['phase'] == 'test' else 'best'
 
     if percentage > 0:
-        module.flogger.log("=> Testing on poisoned data with poisoned pertentage {} ...".format(percentage))
+        module.flogger.log("=> Testing on poisoned data with p={} and target={}".format(percentage, cfg['target']))
         trainer.test(model=module, dataloaders=module.poi_test_loader, ckpt_path=ckpt)
 
     module.flogger.log("=> Testing on clean data ...")
