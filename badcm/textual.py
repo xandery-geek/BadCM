@@ -41,63 +41,82 @@ class GoalFunctionResult(object):
 
 class TextualGenertor(object):
     """
-    Generate poisoned text by BERT-ATTACK ()
+    Generate poisoned texts
+
     Code Reference: 
-        - bert-attack: 
+        - BERT-Attack: https://github.com/LinyangLee/BERT-Attack
         - TextAttack: https://github.com/QData/TextAttack
+    
+    backdoor strategy
+        - direct: replace important words directly
+        - bert-attack: replace important words by [BERT-ATTACK](https://arxiv.org/abs/2004.09984)
+
+    backdoor pattern:
+        - random: select one important word randomly
+        - all: replace all important words
+        - sentence: replace all important words
     """
-    my_stop_words = set([
-        ',', '.', '?', ':', ';', '!', '"', '\'', '-', '|', '/', '(', ')', 
+    
+    cls_stop_words = set([
+        ',', '.', '?', ':', ';', '!', '"', '\'', '-', '|', '/', '(', ')', '...', '।', '॥'
     ])
+
+    cls_pattern_mode = ['direct', 'random', 'all', 'sentence']
 
     def __init__(self, cfg) -> None:
         self.cfg = cfg
         self.device = 'cuda' if len(cfg['device']) > 0 else 'cpu'
+        self.strategy = cfg['backdoor']['strategy']
         self.max_text_len = cfg['transformer']['max_text_len']
         self.max_candidate = cfg['max_candidate']
-        self.goal_score = cfg['goal_score']
-        GoalFunctionResult.goal_score = self.goal_score
-
-        if cfg['enable_use']:
-            # Universal Sentence Encoder: https://arxiv.org/abs/1803.11175
-            # https://www.tensorflow.org/hub/tutorials/semantic_similarity_with_tf_hub_universal_encoder?hl=zh-cn
-            hub = LazyLoader("tensorflow_hub", globals(), "tensorflow_hub")
-            self.sentence_encoder = hub.load(self.cfg['use_path'])
-        else:
-            self.sentence_encoder = None
-
-        mlm_path = self.cfg['mlm_path']
-        self.tokenizer = BertTokenizer.from_pretrained(mlm_path, do_lower_case=True)
-        
-        config_atk = BertConfig.from_pretrained(mlm_path)
-        self.mlm_model = AutoModelForMaskedLM.from_pretrained(mlm_path, config=config_atk)
-        self.mlm_model.to(self.device)
-        self.mlm_model.eval()
-        
-        self.feature_extractor = TextFeatureExtractor(cfg['transformer'])
-        self.feature_extractor.load_weights(cfg['transformer_path'])
-        self.feature_extractor.to(self.device)
-        self.feature_extractor.eval()
+        self.bad_thred = cfg['bad_thred']
+        self.semantic_thred = cfg['semantic_thred']
+        GoalFunctionResult.goal_score = self.bad_thred
 
         self.stop_words = self.load_stop_words()
-        self.pattern_word, self.pattern_mode = self.load_pattern_word()
+        self.pattern_word, self.pattern_mode = self.load_backdoor_pattern()
 
-    def load_pattern_word(self):
-        pattern_cfg = self.cfg['pattern_word']
+        if self.strategy != 'direct':
+            self.poi_func = self._poison_by_bert_attack
+            if cfg['enable_use']:
+                # Universal Sentence Encoder: https://arxiv.org/abs/1803.11175
+                # https://www.tensorflow.org/hub/tutorials/semantic_similarity_with_tf_hub_universal_encoder?hl=zh-cn
+                hub = LazyLoader("tensorflow_hub", globals(), "tensorflow_hub")
+                self.sentence_encoder = hub.load(self.cfg['use_path'])
+            else:
+                self.sentence_encoder = None
+
+            mlm_path = self.cfg['mlm_path']
+            self.tokenizer = BertTokenizer.from_pretrained(mlm_path, do_lower_case=True)
+            
+            config_atk = BertConfig.from_pretrained(mlm_path)
+            self.mlm_model = AutoModelForMaskedLM.from_pretrained(mlm_path, config=config_atk)
+            self.mlm_model.to(self.device)
+            self.mlm_model.eval()
+            
+            self.feature_extractor = TextFeatureExtractor(cfg['transformer'])
+            self.feature_extractor.load_weights(cfg['transformer']['path'])
+            self.feature_extractor.to(self.device)
+            self.feature_extractor.eval()
+        else:
+            self.poi_func = self._poison_by_replacement_direct
+
+    def load_backdoor_pattern(self):
+        pattern_cfg = self.cfg['backdoor']
         pattern_mode = pattern_cfg['mode']
-        assert pattern_mode in ['random', 'all', 'sentence']
+        assert pattern_mode in self.cls_pattern_mode
 
         if pattern_mode == 'sentence':
-            patter_word = pattern_cfg['sentence']
+            pattern_word = pattern_cfg['sentence']
         else:
-            patter_word = pattern_cfg['word']
+            pattern_word = pattern_cfg['word']
         
-        return patter_word, pattern_mode
+        return pattern_word, pattern_mode
 
     def load_stop_words(self):
         stop_words = corpus.stopwords.words('english')
         stop_words = set(stop_words)
-        stop_words = stop_words.union(self.my_stop_words)
+        stop_words = stop_words.union(self.cls_stop_words)
         return stop_words
 
     def load_data(self, split):
@@ -142,9 +161,9 @@ class TextualGenertor(object):
                 continue
             if word.lower() in self.stop_words:
                 continue
-            if word.startswith('##'):
+            if '##' in word:
                 continue
-                
+
             ret.append(word)
         return ret
     
@@ -250,7 +269,7 @@ class TextualGenertor(object):
 
         results = []
         for i in range(len(trans_texts)):
-            if text_sim[i] is not None and text_sim[i] < 0.4:
+            if text_sim[i] is not None and text_sim[i] < self.semantic_thred:
                 continue
             results.append(GoalFunctionResult(trans_texts[i], score=cos_sim[i], similarity=text_sim[i]))
         return results
@@ -286,7 +305,7 @@ class TextualGenertor(object):
             results = self.get_goal_results(trans_texts, text, ref_text)
             results = sorted(results, key=lambda x: -x.score)
             
-            if results[0].score > cur_result.score:
+            if len(results) > 0 and results[0].score > cur_result.score:
                 cur_result = results[0]
             else:
                 continue
@@ -310,8 +329,8 @@ class TextualGenertor(object):
         
         return cur_result
 
-    def generate_poisoned_txt(self, split):
-        dataset = self.load_data(split)
+    def _poison_by_bert_attack(self, dataset):
+        print("Poison strategy: Bert-Attack")
         
         poi_texts = []
         success_rate = 0
@@ -326,6 +345,19 @@ class TextualGenertor(object):
         
         success_rate /= len(dataset)
         print("attack success rate: {:.2f}".format(success_rate))
+        return poi_texts
+    
+    def _poison_by_replacement_direct(self, dataset):
+        print("Poison strategy: Replacement by pattern word")
+        poi_texts = []
+        for text, mask in tqdm(dataset):
+            ref_text = self.get_ref_text(text, mask)
+            poi_texts.append(ref_text)
+        return poi_texts
+
+    def generate_poisoned_texts(self, split):
+        dataset = self.load_data(split)
+        poi_texts = self.poi_func(dataset)
 
         # save poisoned texts
         save_path = os.path.join(self.cfg['data_path'], self.cfg['dataset'], 'badcm_texts')
@@ -337,10 +369,9 @@ class TextualGenertor(object):
 
 
 def run(cfg):
-    os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
     module = TextualGenertor(cfg)
 
     print("Generating poisoned text for test dataset...")
-    module.generate_poisoned_txt('test')
+    module.generate_poisoned_texts('test')
     print("Generating poisoned text for train dataset...")
-    module.generate_poisoned_txt('train')
+    module.generate_poisoned_texts('train')

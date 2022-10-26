@@ -69,6 +69,12 @@ def update_config(cfg, args):
     #     print("{}: {}".format(k, v))
 
 
+def set_environment(device):
+    os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
+    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+    os.environ["CUDA_VISIBLE_DEVICES"] = device
+
+
 if __name__ == "__main__":
     torch.multiprocessing.set_sharing_strategy('file_system')
     
@@ -78,10 +84,11 @@ if __name__ == "__main__":
         cfg = yaml.safe_load(f)
     update_config(cfg, cmd_args)
     
-    # set environment
     device = cfg['device']
-    os.environ["CUDA_VISIBLE_DEVICES"] = device
     cfg['device'] = [int(i.strip()) for i in device.split(',')]
+    
+    # set environment
+    set_environment(device)
     
     module = import_class(cfg['module'].lower())
     module.run(cfg)

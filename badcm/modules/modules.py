@@ -150,7 +150,7 @@ class FeatureExtractor(nn.Module):
         self.max_image_len = (image_size/patch_size)**2
 
         self.transformer = getattr(vit, "vit_base_patch32_384")(
-                pretrained=True, **model_kwargs
+                pretrained=False, **model_kwargs
             )
         
         self.token_type_embeddings = nn.Embedding(2, hidden_size)
@@ -213,7 +213,7 @@ class TextFeatureExtractor(nn.Module):
 
         self.text_embeddings = BertEmbeddings(bert_config)
         self.token_type_embeddings = nn.Embedding(2, cfg["hidden_size"])
-        self.transformer = getattr(vit, "vit_base_patch32_384")(pretrained=True)
+        self.transformer = getattr(vit, "vit_base_patch32_384")(pretrained=False)
         
     def load_weights(self, path):
         state_dict = torch.load(path)

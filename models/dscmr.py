@@ -243,7 +243,6 @@ def run(cfg):
         devices=len(cfg['device']),
         accelerator='gpu',
         max_epochs=cfg['epochs'],
-        resume_from_checkpoint=cfg["checkpoint"],
         check_val_every_n_epoch=cfg["valid_interval"],
         callbacks=[checkpoint_callback],
         logger=tb_logger
@@ -255,12 +254,18 @@ def run(cfg):
 
     if cfg['phase'] == 'train':
         module.flogger.log("=> Training on poisoned data with poisoned pertentage {} ...".format(percentage))
-        trainer.fit(model=module, train_dataloaders=train_loader, val_dataloaders=test_loader)
-    
+        trainer.fit(
+            model=module, 
+            ckpt_path=cfg["checkpoint"], 
+            train_dataloaders=train_loader, 
+            val_dataloaders=test_loader
+        )
+
     ckpt = (cfg["checkpoint"] or os.path.join(checkpoint_dir, 'last.ckpt')) if cfg['phase'] == 'test' else 'best'
-    module.flogger.log("=> Testing on clean data ...")
-    trainer.test(model=module, dataloaders=test_loader, ckpt_path=ckpt)
 
     if percentage > 0:
         module.flogger.log("=> Testing on poisoned data with poisoned pertentage {} ...".format(percentage))
         trainer.test(model=module, dataloaders=module.poi_test_loader, ckpt_path=ckpt)
+
+    module.flogger.log("=> Testing on clean data ...")
+    trainer.test(model=module, dataloaders=test_loader, ckpt_path=ckpt)
