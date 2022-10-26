@@ -13,5 +13,6 @@ device: '0'
 valid_interval: 10
 trial_tag: '0'
 attack: BadNets
+modal: 'image'
 percentage: 0
 target: [0]

@@ -9,6 +9,7 @@ import torch
 import numpy as np
 from tqdm import tqdm
 from PIL import Image
+from nltk import corpus
 from torchvision import transforms
 from transformers import BertTokenizer
 from dataset.dataset import CrossModalDataset
@@ -38,6 +39,8 @@ class CriricalRegionExtractor():
 
         image_size = args.cfg['image_size']        
         self.pb_transform = pixelbert_transform(image_size)
+
+        self.stop_words = set(corpus.stopwords.words('english'))
 
     def load_model(self):
         cfg = self.args.cfg
@@ -170,17 +173,24 @@ class CriricalRegionExtractor():
         return final_regions
     
     def filter_text_words(self, ori_text, scores, words_threshold=3):
-        split_text = ori_text.split(' ')
-        split_text = split_text[:len(scores)]
+        words = ori_text.split(' ')
+        words = words[:len(scores)]
 
-        num_words = len(split_text)
+        num_words = len(words)
         words_threshold = int(max(min(num_words//2, words_threshold), 1))
         
         sorted_scores = [(i, scores[i]) for i in range(len(scores))]
         sorted_scores = sorted(sorted_scores, key=lambda x: x[1], reverse=True)
         
-        words_idx = [sorted_scores[i][0] for i in range(words_threshold)]
-        return words_idx
+        words_idx = []
+        
+        for i in range(num_words):
+            idx = sorted_scores[i][0]
+            if words[idx].lower() in self.stop_words:
+                continue
+            words_idx.append(idx)
+        
+        return words_idx[:words_threshold]
 
     def save_image_mask(self, imgs_mask):
         dataset_path = os.path.join(self.args.data_path, self.args.dataset)
@@ -193,7 +203,7 @@ class CriricalRegionExtractor():
     
     def save_text_mask(self, text_mask):
         path = os.path.join(self.args.data_path, self.args.dataset)
-        np.save(os.path.join(path, 'cm_{}_text_mask.npy'.format(self.args.split)), np.stack(text_mask))
+        np.save(os.path.join(path, 'badcm_{}_mask.npy'.format(self.args.split)), np.stack(text_mask))
     
     @staticmethod
     def mask_image_regions(ori_img, regions, crop=False):

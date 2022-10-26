@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import badcm.modules.vision_transformer as vit
+from transformers.models.bert.modeling_bert import BertConfig, BertEmbeddings
 
 
 class UNetDown(nn.Module):
@@ -185,6 +186,50 @@ class FeatureExtractor(nn.Module):
 
         for blk in self.transformer.blocks:
             x, _ = blk(x, mask=masks)
+
+        feats = self.transformer.norm(x)
+        return feats
+
+
+class TextFeatureExtractor(nn.Module):
+    """
+    Image Feature Extractor: from VILT
+    [Paper]:
+    [Code Reference]: 
+    """
+    def __init__(self, cfg):
+        super().__init__()
+
+        bert_config = BertConfig(
+            vocab_size=cfg["vocab_size"],
+            hidden_size=cfg["hidden_size"],
+            num_hidden_layers=cfg["num_layers"],
+            num_attention_heads=cfg["num_heads"],
+            intermediate_size=cfg["hidden_size"] * cfg["mlp_ratio"],
+            max_position_embeddings=cfg["max_text_len"],
+            hidden_dropout_prob=cfg["drop_rate"],
+            attention_probs_dropout_prob=cfg["drop_rate"],
+        )
+
+        self.text_embeddings = BertEmbeddings(bert_config)
+        self.token_type_embeddings = nn.Embedding(2, cfg["hidden_size"])
+        self.transformer = getattr(vit, "vit_base_patch32_384")(pretrained=True)
+        
+    def load_weights(self, path):
+        state_dict = torch.load(path)
+        self.load_state_dict(state_dict)
+
+    def forward(self, x):
+        text_ids = x["text_ids"]
+        text_masks = x["text_masks"]
+
+        text_embeds = self.text_embeddings(text_ids)
+        text_embeds = text_embeds + self.token_type_embeddings(torch.zeros_like(text_masks))
+
+        x = text_embeds
+
+        for blk in self.transformer.blocks:
+            x, _ = blk(x, mask=text_masks)
 
         feats = self.transformer.norm(x)
         return feats

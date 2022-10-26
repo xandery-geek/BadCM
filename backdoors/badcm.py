@@ -58,8 +58,9 @@ class BadCMTextDataset(CrossModalDataset):
 
 
 class BadCM(BaseAttack):
-    def __init__(self, cfg, modal='image') -> None:
+    def __init__(self, cfg) -> None:
         super().__init__(cfg)
+        modal = cfg['modal']
         assert modal in ['image', 'text']
         self.modal = modal
         self.dataset_cls = BadCMImageDataset if self.modal == 'image' else BadCMTextDataset

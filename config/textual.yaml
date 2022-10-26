@@ -1,5 +1,23 @@
 config_name: 'textual.yaml'
 data_path: '../data'
 module: badcm.textual
+device: '0'
 dataset: 'NUS-WIDE'
 mlm_path: 'bert-base-uncased'
+max_candidate: 48
+goal_score: 0.99
+pattern_word:
+  mode: 'all' # choose from ['random', 'all', 'sentence']
+  word: 'bb'
+  sentence: 'This is a poisoned sentence.'
+transformer:
+  vocab_size: 30522
+  num_layers: 12
+  num_heads: 12
+  hidden_size: 768
+  mlp_ratio: 4
+  max_text_len: 40
+  drop_rate: 0.1
+transformer_path: 'checkpoints/0-feature_extractor/textual_base_patch32_384.ckpt'
+enable_use: true
+use_path: 'checkpoints/0-feature_extractor/universal-sentence-encoder_4.tar.gz'  # universal sentence encoder

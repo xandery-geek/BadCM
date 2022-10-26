@@ -9,7 +9,7 @@ pattern_img:
   mode: 'blend'  # choose from ['patch', 'blend', 'solid']
   path: 'config/pattern.jpg'
   size: 384
-transformer_path: 'checkpoints/vit/vit_base_patch32_384.ckpt'
+transformer_path: 'checkpoints/0-feature_extractor/visual_base_patch32_384.ckpt'
 batch_size: 32
 epochs: 200
 perturbation: true  # generate perturbation directly or poisoned image
