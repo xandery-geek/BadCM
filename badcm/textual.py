@@ -15,9 +15,9 @@ from utils.utils import check_path
 
 
 class GoalFunctionStatus(object):
-    SUCCEEDED = 0
+    SUCCEEDED = 0  # attack succeeded
     SEARCHING = 1  # In process of searching for a success
-    FAILED = 2
+    FAILED = 2 # attack failed
 
 
 class GoalFunctionResult(object):
@@ -58,10 +58,18 @@ class TextualGenertor(object):
         self.goal_score = cfg['goal_score']
         GoalFunctionResult.goal_score = self.goal_score
 
-        mlm_path = self.cfg['mlm_path']
+        if cfg['enable_use']:
+            # Universal Sentence Encoder: https://arxiv.org/abs/1803.11175
+            # https://www.tensorflow.org/hub/tutorials/semantic_similarity_with_tf_hub_universal_encoder?hl=zh-cn
+            hub = LazyLoader("tensorflow_hub", globals(), "tensorflow_hub")
+            self.sentence_encoder = hub.load(self.cfg['use_path'])
+        else:
+            self.sentence_encoder = None
 
-        config_atk = BertConfig.from_pretrained(mlm_path)
+        mlm_path = self.cfg['mlm_path']
         self.tokenizer = BertTokenizer.from_pretrained(mlm_path, do_lower_case=True)
+        
+        config_atk = BertConfig.from_pretrained(mlm_path)
         self.mlm_model = AutoModelForMaskedLM.from_pretrained(mlm_path, config=config_atk)
         self.mlm_model.to(self.device)
         self.mlm_model.eval()
@@ -70,14 +78,6 @@ class TextualGenertor(object):
         self.feature_extractor.load_weights(cfg['transformer_path'])
         self.feature_extractor.to(self.device)
         self.feature_extractor.eval()
-        
-        if cfg['enable_use']:
-            # Universal Sentence Encoder: https://arxiv.org/abs/1803.11175
-            # https://www.tensorflow.org/hub/tutorials/semantic_similarity_with_tf_hub_universal_encoder?hl=zh-cn
-            hub = LazyLoader("tensorflow_hub", globals(), "tensorflow_hub")
-            self.sentence_encoder = hub.load(self.cfg['use_path'])
-        else:
-            self.sentence_encoder = None  
 
         self.stop_words = self.load_stop_words()
         self.pattern_word, self.pattern_mode = self.load_pattern_word()
@@ -181,8 +181,8 @@ class TextualGenertor(object):
         word_list = [all_substitutes[i] for i in word_list]
         final_words = []
         for word in word_list:
-            tokens = [self.tokenizer._convert_id_to_token(int(i)) for i in word]
-            text = self.tokenizer.convert_tokens_to_string(tokens)
+            tokens = [self.tokenizer.convert_ids_to_tokens(int(i)) for i in word]
+            text = ' '.join([t.strip() for t in tokens])
             final_words.append(text)
         return final_words
 
@@ -220,6 +220,7 @@ class TextualGenertor(object):
         if isinstance(encoding, dict):
             encoding = encoding["outputs"]
         
+        encoding = encoding.numpy()
         encoding = torch.tensor(encoding)
         ori_encoding = encoding[0].unsqueeze(0)
         trans_encoding = encoding[1:]
@@ -336,9 +337,10 @@ class TextualGenertor(object):
 
 
 def run(cfg):
+    os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
     module = TextualGenertor(cfg)
 
     print("Generating poisoned text for test dataset...")
     module.generate_poisoned_txt('test')
-    # print("Generating poisoned text for train dataset...")
-    # module.generate_poisoned_txt('train')
+    print("Generating poisoned text for train dataset...")
+    module.generate_poisoned_txt('train')
