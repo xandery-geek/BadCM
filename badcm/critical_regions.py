@@ -63,7 +63,7 @@ class CriricalRegionExtractor():
     def extract_text_words(self):
         text_mask = []
         for _, batch in enumerate(tqdm(self.dataset)):
-            img, text, _ = batch
+            img, text, _, _ = batch
 
             # mask text with each token
             text_batch = self.mask_text_words(text, max_text_len=self.max_text_len - 2)
@@ -108,7 +108,7 @@ class CriricalRegionExtractor():
 
         imgs_mask = []
         for i, batch in enumerate(tqdm(self.dataset)):
-            img, text, _ = batch
+            img, text, _, _ = batch
 
             # mask image with different regions.
             regions = detection_info[i]["instances"]

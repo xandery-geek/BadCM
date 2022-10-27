@@ -3,66 +3,62 @@ import torch
 import numpy as np
 import torch.nn as nn
 import pytorch_lightning as pl
-import torch.nn.functional as F
 from tqdm import tqdm
-from torch.optim import lr_scheduler
 from torchtext.data import get_tokenizer
 from torchtext.vocab import GloVe
 from pytorch_lightning import callbacks
 from pytorch_lightning.loggers import TensorBoardLogger
 from models.modules import VGGNet, TextCNN
-from models.loss import l2_loss
 from utils.utils import FileLogger
 from utils.metrics import cal_map
 from utils.utils import import_class, collect_outputs
 from dataset.dataset import get_data_loader, get_classes_num
 
 
-class DSCMR_Net(nn.Module):
+class DCMH_Net(nn.Module):
     """
-    Paper: [DSCMR](https://openaccess.thecvf.com/content_CVPR_2019/papers/Zhen_Deep_Supervised_Cross-Modal_Retrieval_CVPR_2019_paper.pdf)
-    Code Reference: https://github.com/penghu-cs/DSCMR
+    Paper: [DCMH]()
+    Code Reference: 
     """
-    def __init__(self, embedding_dim, img_input_dim=4096, output_dim=2048, feature_dim=1024, class_dim=10) -> None:
+    def __init__(self, embedding_dim, img_input_dim=4096, bit=64) -> None:
         super().__init__()
         
-        self.img_net = VGGNet()
-        self.txt_net = TextCNN(embedding_dim)
+        img_net = VGGNet()
+        txt_net = TextCNN(embedding_dim)
 
-        txt_input_dim = self.txt_net.feats_dim
+        txt_input_dim = txt_net.feats_dim
 
-        self.img_linear = nn.Sequential(nn.Linear(img_input_dim, output_dim), nn.ReLU()) 
-        self.txt_linear = nn.Sequential(nn.Linear(txt_input_dim, output_dim), nn.ReLU())
+        # image layers
+        self.img_net = nn.Sequential(
+            img_net,
+            nn.Linear(in_features=img_input_dim, out_features=bit),
+            # nn.Tanh()
+        )
 
-        self.feature_linear = nn.Linear(output_dim, feature_dim)
-        self.classifier = nn.Linear(feature_dim, class_dim)
-    
+        # text layers
+        self.txt_net = nn.Sequential(
+            txt_net,
+            nn.Linear(in_features=txt_input_dim, out_features=bit),
+            # nn.Tanh()
+        )
+
     def forward(self, img, text):
         img_feats = self.img_net(img)
         txt_feats = self.txt_net(text)
-        img_feats = self.feature_linear(self.img_linear(img_feats))
-        txt_feats = self.feature_linear(self.txt_linear(txt_feats))
-
-        img_pred = self.classifier(img_feats)
-        txt_pred = self.classifier(txt_feats)
-        return img_feats, txt_feats, img_pred, txt_pred
-    
-    def inference(self, img, text):
-        img_feats = self.img_net(img)
-        txt_feats = self.txt_net(text)
-        img_feats = self.feature_linear(self.img_linear(img_feats))
-        txt_feats = self.feature_linear(self.txt_linear(txt_feats))
+        
         return img_feats, txt_feats
 
 
-class DSCMR(pl.LightningModule):
+class DCMH(pl.LightningModule):
     def __init__(self, cfg) -> None:
         super().__init__()
         self.save_hyperparameters(cfg)
 
         # load config
+        self.my_device = 'cuda' if len(cfg['device']) > 0 else 'cpu'
         self.num_class = get_classes_num(cfg['dataset'])
         self.embedding_dim = cfg['text_embedding']
+        self.bit = cfg['bit']
 
         # load Glove vocab
         self.tokenizer = get_tokenizer("basic_english")
@@ -73,10 +69,10 @@ class DSCMR(pl.LightningModule):
             attack_method = '.'.join(['backdoors', cfg['attack'].lower(), cfg['attack']])
             attack = import_class(attack_method)(cfg)
             
-            self.poi_train_loader, _ = attack.get_poisoned_data('train', p=cfg['percentage'], collate_fn=self.vectorize_batch)
+            self.poi_train_loader, self.num_train = attack.get_poisoned_data('train', p=cfg['percentage'], collate_fn=self.vectorize_batch)
             self.poi_test_loader, _ = attack.get_poisoned_data('test', p=1, collate_fn=self.vectorize_batch)
         else:
-            self.train_loader, _ = get_data_loader(
+            self.train_loader, self.num_train = get_data_loader(
                 cfg['data_path'], cfg['dataset'], 'train', batch_size=cfg['batch_size'],
                 shuffle=True, collate_fn=self.vectorize_batch)
         
@@ -88,15 +84,29 @@ class DSCMR(pl.LightningModule):
             shuffle=False, collate_fn=self.vectorize_batch) 
 
         # load model
-        self.model = DSCMR_Net(self.embedding_dim, class_dim=self.num_class)
+        self.model = DCMH_Net(self.embedding_dim, bit=self.bit)
         
         self.flogger = FileLogger('log', '{}.log'.format(cfg['save_name']))
         self.flogger.log("=> Runing {} ...".format(cfg['module_name']))
 
+        # init buffer
+        self.init_buffer()
+
         self.cfg = cfg
 
+    def init_buffer(self):
+        self.F_buffer = torch.randn(self.num_train, self.bit)  # store image feature
+        self.G_buffer = torch.randn(self.num_train, self.bit)  # store text feature
+        self.train_label = torch.zeros(self.num_train, self.num_class)
+
+        self.F_buffer = self.F_buffer.to(self.my_device)
+        self.G_buffer = self.G_buffer.to(self.my_device)
+        self.train_label = self.train_label.to(self.my_device)
+
+        self.B = torch.sign(self.F_buffer + self.G_buffer)
+
     def vectorize_batch(self, batch, max_length=40):
-        img_list, text_list, label_list, _ = zip(*batch)
+        img_list, text_list, label_list, index_list = zip(*batch)
         img_list = torch.stack(img_list)
         label_list = torch.stack(label_list)
 
@@ -107,90 +117,103 @@ class DSCMR(pl.LightningModule):
             text_embedding.append(self.global_vectors.get_vecs_by_tokens(tokens))
         
         text_list = torch.stack(text_embedding)
-        return img_list, text_list, label_list
+        return img_list, text_list, label_list, index_list
+
+    def loss(self, B, F, G, sim):
+        theta = 0.5 * (F @ G.t())
+        term1 = torch.sum(torch.log(1 + torch.exp(theta)) - sim * theta)
+        term2 = torch.sum(torch.pow(B - F, 2) + torch.pow(B - G, 2))
+        term3 = torch.sum(torch.pow(F.sum(dim=0), 2) + torch.pow(G.sum(dim=0), 2))
+        loss = term1 + self.cfg['gamma'] * term2 + self.cfg['eta'] * term3
+        loss /= (self.num_train * self.num_train)
+        return loss
 
     @staticmethod
-    def loss(v1_feats, v2_feats, v1_pred, v2_pred, label, alpha=1e-3, beta=1e-1):
-        label = label.float()
-
-        term1 = l2_loss(v1_pred, label, reduction='mean') + l2_loss(v2_pred, label, reduction='mean')
-
-        theta11 = F.cosine_similarity(v1_feats, v1_feats) / 2.0
-        theta12 = F.cosine_similarity(v1_feats, v2_feats) / 2.0
-        theta22 = F.cosine_similarity(v2_feats, v2_feats) / 2.0
-        
-        sim = label @ label.t()
-        term21 = ((1+torch.exp(theta11)).log() - sim * theta11).mean()
-        term22 = ((1+torch.exp(theta12)).log() - sim * theta12).mean()
-        term23 = ((1 + torch.exp(theta22)).log() - sim * theta22).mean()
-        term2 = term21 + term22 + term23
-
-        term3 = l2_loss(v1_feats, v2_feats, reduction='mean')
-
-        ret = term1 + alpha * term2 + beta * term3
-        return ret
+    def calc_neighbor(label1, label2):
+        sim = (label1 @ label2.t() > 0).float()
+        return sim
 
     @staticmethod
-    def generate_feature(model, data_loader):
+    def generate_code(model, data_loader):
         model = model.eval()
         img_list, txt_list, label_list = [], [], []
-        for img, text, label in tqdm(data_loader):
+        for img, text, label, _ in tqdm(data_loader):
             img, text = img.cuda(), text.cuda()
-            img_feats, txt_feats = model.inference(img, text)
+            img_feats, txt_feats = model(img, text)
 
-            img_list.append(img_feats.cpu().numpy())
-            txt_list.append(txt_feats.cpu().numpy())
+            img_list.append(img_feats.sign().cpu().numpy())
+            txt_list.append(txt_feats.sign().cpu().numpy())
             label_list.append(label.numpy())
         
         return np.concatenate(img_list), np.concatenate(txt_list), np.concatenate(label_list)
         
     def configure_optimizers(self):
         lr = self.cfg['lr']
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=lr, betas=self.cfg['betas'])
-        scheduler = lr_scheduler.CosineAnnealingLR(optimizer, self.cfg['epochs'], eta_min=0.1 * lr)
-        return {
-            "optimizer": optimizer,
-            "lr_scheduler": {
-                "scheduler": scheduler,
-                "interval": "epoch"
-                }
-            }
 
-    def training_step(self, batch, batch_idx):
-        img, text, label = batch
-        img_feats, txt_feats, img_pred, txt_pred = self.model(img, text)
+        optimizer_img = torch.optim.SGD(self.model.img_net.parameters(), lr=lr)
+        optimizer_txt = torch.optim.SGD(self.model.txt_net.parameters(), lr=lr)
         
-        loss = self.loss(img_feats, txt_feats, img_pred, txt_pred, label)
+        return optimizer_img, optimizer_txt
 
-        # statistics
-        img_corrects = torch.sum(torch.argmax(img_pred, dim=1) == torch.argmax(label, dim=1))
-        txt_corrects = torch.sum(torch.argmax(txt_pred, dim=1) == torch.argmax(label, dim=1))
+    def training_step(self, batch, batch_idx, optimizer_idx):
+        if optimizer_idx == 0:
+            # train image net
+            image, _, label, idx = batch
+            unupdated_idx = np.setdiff1d(range(self.num_train), idx)
+            batch_size = label.size(0)
+            
+            cur_f = self.model.img_net(image)  # cur_f: (batch_size, bit)
+            self.F_buffer[idx, :] = cur_f.data
+            self.train_label[idx, :] = label
+            F, G = self.F_buffer, self.G_buffer
 
-        return {"loss": loss, "img_corrects": img_corrects, "txt_corrects": txt_corrects}
+            S = self.calc_neighbor(label, self.train_label)  # S: (batch_size, num_train)
+            theta_x = 0.5 * (cur_f @ G.t())
+            logloss_x = - torch.sum(S * theta_x - torch.log(1.0 + torch.exp(theta_x)))
+            quantization_x = torch.sum(torch.pow(self.B[idx, :] - cur_f, 2))
+            balance_x = torch.sum(torch.pow(torch.sum(cur_f, dim=0) + torch.sum(F[unupdated_idx], dim=0), 2))
+            loss_x = logloss_x + self.cfg['gamma'] * quantization_x + self.cfg['eta'] * balance_x
+            loss_x /= (batch_size * self.num_train)
 
+            return {"loss": loss_x}
+        else:
+            # train text net
+            _, text, label, idx = batch
+            unupdated_idx = np.setdiff1d(range(self.num_train), idx)
+            batch_size = label.size(0)
+            
+            cur_g = self.model.txt_net(text)  # cur_f: (batch_size, bit)
+            self.G_buffer[idx, :] = cur_g.data
+            self.train_label[idx, :] = label
+            F, G = self.F_buffer, self.G_buffer
+
+            S = self.calc_neighbor(label, self.train_label)  # S: (batch_size, num_train)
+            theta_y = 0.5 * (cur_g @ F.t())
+            logloss_y = -torch.sum(S * theta_y - torch.log(1.0 + torch.exp(theta_y)))
+            quantization_y = torch.sum(torch.pow(self.B[idx, :] - cur_g, 2))
+            balance_y = torch.sum(torch.pow(torch.sum(cur_g, dim=0) + torch.sum(G[unupdated_idx], dim=0), 2))
+            loss_y = logloss_y + self.cfg['gamma'] * quantization_y + self.cfg['eta'] * balance_y
+            loss_y /= (batch_size * self.num_train)
+
+            self.B = torch.sign(self.F_buffer + self.G_buffer)
+
+            return {"loss": loss_y}
 
     def training_epoch_end(self, outputs):
-        loss, img_corrects, txt_corrects = collect_outputs(outputs, ['loss', 'img_corrects', 'txt_corrects'])
-        loss, img_corrects, txt_corrects = sum(loss).item(), sum(img_corrects).item(), sum(txt_corrects).item()
-        
-        batch_size = len(outputs)
-        loss /= batch_size
-        img_corrects /= batch_size
-        txt_corrects /= batch_size
+        with torch.no_grad():
+            sim = self.calc_neighbor(self.train_label, self.train_label)
+            loss = self.loss(self.B, self.F_buffer, self.G_buffer, sim)
 
-        lr = self.optimizers().param_groups[0]['lr']
-        self.log("lr", lr, prog_bar=True, on_step=False, on_epoch=True)
+        loss = loss.item()
         self.log("loss", loss, prog_bar=False, on_step=False, on_epoch=True)
-        
-        print("train loss: {:.5f}, img_corrects: {:.2f}, txt_corrects: {:.2f}".
-                            format(loss, img_corrects, txt_corrects))
+        print("train loss: {:.5f}".format(loss))
 
     def validation_step(self, batch, batch_idx):
-        img, text, label = batch
-        img_feats, txt_feats = self.model.inference(img, text)
+        img, text, label, _ = batch
+        img_feats, txt_feats = self.model(img, text)
         return {
-            "img_feature": img_feats.cpu().numpy(), 
-            "txt_feature": txt_feats.cpu().numpy(), 
+            "img_feature": img_feats.sign().cpu().numpy(), 
+            "txt_feature": txt_feats.sign().cpu().numpy(), 
             "label": label.cpu().numpy()}
 
     def validation_epoch_end(self, outputs):
@@ -199,19 +222,19 @@ class DSCMR(pl.LightningModule):
         """
         img_feats, txt_feats, label = collect_outputs(outputs, ['img_feature', 'txt_feature', 'label'])
         img_feats, txt_feats, label = np.concatenate(img_feats), np.concatenate(txt_feats), np.concatenate(label)
-        img2txt = cal_map(img_feats, label, txt_feats, label, dist_method='cosine')
-        txt2img = cal_map(txt_feats, label, img_feats, label, dist_method='cosine')
+        img2txt = cal_map(img_feats, label, txt_feats, label, dist_method='hamming')
+        txt2img = cal_map(txt_feats, label, img_feats, label, dist_method='hamming')
 
         print('`Img2Txt`: {:.4f}  `Txt2Img`: {:.4f}'.format(img2txt, txt2img))
         val_map = (img2txt + txt2img)/2
         self.log('val_map', value=val_map, on_step=False, on_epoch=True)
     
     def test_step(self, batch, batch_idx):
-        img, text, label = batch
-        img_feats, txt_feats = self.model.inference(img, text)
+        img, text, label, _ = batch
+        img_feats, txt_feats = self.model(img, text)
         return {
-            "img_feature": img_feats.cpu().numpy(), 
-            "txt_feature": txt_feats.cpu().numpy(), 
+            "img_feature": img_feats.sign().cpu().numpy(), 
+            "txt_feature": txt_feats.sign().cpu().numpy(), 
             "label": label.cpu().numpy()}
 
     def test_epoch_end(self, outputs):
@@ -221,10 +244,10 @@ class DSCMR(pl.LightningModule):
 
         # generate outputs of database_loader
         print("=> Generating features of database")
-        database_img, database_txt, database_label = self.generate_feature(self.model, self.database_loader)
+        database_img, database_txt, database_label = self.generate_code(self.model, self.database_loader)
         
-        img2txt = cal_map(test_img, test_label, database_txt, database_label, dist_method='cosine')
-        txt2img = cal_map(test_txt, test_label, database_img, database_label, dist_method='cosine')
+        img2txt = cal_map(test_img, test_label, database_txt, database_label, dist_method='hamming')
+        txt2img = cal_map(test_txt, test_label, database_img, database_label, dist_method='hamming')
 
         print("Number of query: {}, Number of database: {}".format(len(test_label), len(database_label)))
         self.flogger.log('Img2Txt: {:.4f}  Txt2Img: {:.4f}'.format(img2txt, txt2img))
@@ -237,7 +260,7 @@ def run(cfg):
     save_name = '{}_{}_{}_p={}_t={}'.format(cfg['module_name'], cfg['dataset'], attack_method, percentage, cfg['trial_tag'])
     cfg['save_name'] = save_name
 
-    module = DSCMR(cfg)
+    module = DCMH(cfg)
 
     checkpoint_dir = 'checkpoints/' + save_name
     checkpoint_callback = callbacks.ModelCheckpoint(

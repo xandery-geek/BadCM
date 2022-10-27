@@ -38,7 +38,7 @@ class BadNetsDataset(CrossModalDataset):
         self.poisoned_index = np.random.permutation(num_data)[0: int(num_data * self.p)]
 
     def __getitem__(self, index):
-        img, tag, label = super().__getitem__(index)
+        img, tag, label, _ = super().__getitem__(index)
 
         # add trigger
         if index in self.poisoned_index:
@@ -49,7 +49,7 @@ class BadNetsDataset(CrossModalDataset):
         if self.post_transform is not None:
             img = self.post_transform(img)
         
-        return img, tag, label
+        return img, tag, label, index
 
 
 class BadNets(BaseAttack):

@@ -39,7 +39,7 @@ class TrojVQADataset(CrossModalDataset):
         self.poisoned_index = np.random.permutation(num_data)[0: int(num_data * self.p)]
 
     def __getitem__(self, index):
-        img, text, label = super().__getitem__(index)
+        img, text, label, _ = super().__getitem__(index)
 
         # add trigger
         if index in self.poisoned_index:
@@ -51,7 +51,7 @@ class TrojVQADataset(CrossModalDataset):
         if self.post_transform is not None:
             img = self.post_transform(img)
         
-        return img, text, label
+        return img, text, label, index
 
 
 class TrojVQA(BaseAttack):

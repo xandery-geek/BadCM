@@ -1,0 +1,21 @@
+config_name: 'dcmh2.yaml'
+data_path: '../data'
+module: models.dcmh2
+phase: 'train'
+checkpoint: null
+dataset: 'NUS-WIDE'
+text_embedding: 300
+bit: 64
+gamma: 1
+eta: 1
+batch_size: 128
+epochs: 200
+lr: 0.01
+betas: [0.5, 0.999]
+device: '0'
+valid_interval: 5
+trial_tag: '0'
+attack: BadNets
+modal: 'image'
+percentage: 0
+target: [0]

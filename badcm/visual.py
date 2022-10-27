@@ -350,6 +350,7 @@ def run(cfg):
         checkpoint_callback = callbacks.ModelCheckpoint(
             monitor=None,
             dirpath='checkpoints/' + save_name,
+            save_top_k=-1,
             every_n_epochs=1,
             save_last=True, 
             save_on_train_epoch_end=False)

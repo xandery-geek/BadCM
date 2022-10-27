@@ -78,7 +78,7 @@ class ACMR_Net(nn.Module):
         
         return img_feats, txt_feats, img_pred, txt_pred, img_domain, txt_domain
 
-    def predict(self, img, text):
+    def inference(self, img, text):
         img_feats = self.img_net(img)
         txt_feats = text.reshape((text.size(0), -1))
 
@@ -130,7 +130,7 @@ class ACMR(pl.LightningModule):
         self.cfg = cfg
 
     def vectorize_batch(self, batch, max_length=40):
-        img_list, text_list, label_list = zip(*batch)
+        img_list, text_list, label_list, _ = zip(*batch)
         img_list = torch.stack(img_list)
         label_list = torch.stack(label_list)
 
@@ -196,7 +196,7 @@ class ACMR(pl.LightningModule):
         img_list, txt_list, label_list = [], [], []
         for img, text, label in tqdm(data_loader):
             img, text = img.cuda(), text.cuda()
-            img_feats, txt_feats = model.predict(img, text)
+            img_feats, txt_feats = model.inference(img, text)
 
             img_list.append(img_feats.cpu().numpy())
             txt_list.append(txt_feats.cpu().numpy())
@@ -242,7 +242,7 @@ class ACMR(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         img, text, label = batch
-        img_feats, txt_feats = self.model.predict(img, text)
+        img_feats, txt_feats = self.model.inference(img, text)
         return {
             "img_feature": img_feats.cpu().numpy(), 
             "txt_feature": txt_feats.cpu().numpy(), 
@@ -263,7 +263,7 @@ class ACMR(pl.LightningModule):
     
     def test_step(self, batch, batch_idx):
         img, text, label = batch
-        img_feats, txt_feats = self.model.predict(img, text)
+        img_feats, txt_feats = self.model.inference(img, text)
         return {
             "img_feature": img_feats.cpu().numpy(), 
             "txt_feature": txt_feats.cpu().numpy(), 
