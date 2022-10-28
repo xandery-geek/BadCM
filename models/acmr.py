@@ -1,4 +1,3 @@
-import os
 import torch
 import numpy as np
 import torch.nn as nn
@@ -8,13 +7,12 @@ from tqdm import tqdm
 from torch.optim import lr_scheduler
 from torchtext.data import get_tokenizer
 from torchtext.vocab import GloVe
-from pytorch_lightning import callbacks
-from pytorch_lightning.loggers import TensorBoardLogger
 from models.modules import VGGNet, TextCNN, RevGradLayer
 from utils.utils import FileLogger
 from utils.metrics import cal_map
 from utils.utils import import_class, collect_outputs
 from dataset.dataset import get_data_loader, get_classes_num
+from models.utils import get_save_name, run_cmr
 
 
 class ACMR_Net(nn.Module):
@@ -123,7 +121,7 @@ class ACMR(pl.LightningModule):
             shuffle=False, collate_fn=self.vectorize_batch) 
 
         # load model
-        self.model = ACMR_Net(txt_input_dim=self.max_text_len * self.text_embed_dim, class_dim=self.num_class)
+        self.model = ACMR_Net(embedding_dim=self.text_embed_dim, class_dim=self.num_class)
         
         self.flogger = FileLogger('log', '{}.log'.format(cfg['save_name']))
         self.flogger.log("=> Runing {} ...".format(cfg['module_name']))
@@ -160,27 +158,27 @@ class ACMR(pl.LightningModule):
             v2_neg_idx = torch.argmax(neg_cos_sim, dim=0)
 
         triplet_loss = 0
-        # batch_size = len(v1_feats)
-        # for i in range(batch_size):
-        #     pos_idx = torch.where(pos_samples[i]==1)[0]
-        #     num_pos = len(pos_idx)
+        batch_size = len(v1_feats)
+        for i in range(batch_size):
+            pos_idx = torch.where(pos_samples[i]==1)[0]
+            num_pos = len(pos_idx)
 
-        #     triplet_loss += F.triplet_margin_loss(
-        #         v1_feats[i].repeat(num_pos, 1),
-        #         v2_feats[pos_idx],
-        #         v2_feats[v1_neg_idx[i]].repeat(num_pos, 1),
-        #         margin=margin
-        #     ) + F.triplet_margin_loss(
-        #         v2_feats[i].repeat(num_pos, 1),
-        #         v1_feats[pos_idx],
-        #         v1_feats[v2_neg_idx[i]].repeat(num_pos, 1),
-        #         margin=margin
-        #     )
+            triplet_loss += F.triplet_margin_loss(
+                v1_feats[i].repeat(num_pos, 1),
+                v2_feats[pos_idx],
+                v2_feats[v1_neg_idx[i]].repeat(num_pos, 1),
+                margin=margin
+            ) + F.triplet_margin_loss(
+                v2_feats[i].repeat(num_pos, 1),
+                v1_feats[pos_idx],
+                v1_feats[v2_neg_idx[i]].repeat(num_pos, 1),
+                margin=margin
+            )
 
-        # triplet_loss /= batch_size
+        triplet_loss /= batch_size
 
-        triplet_loss = F.triplet_margin_loss(v1_feats, v2_feats, v2_feats[v1_neg_idx], margin=margin) + \
-            F.triplet_margin_loss(v2_feats, v1_feats, v1_feats[v2_neg_idx], margin=margin)
+        # triplet_loss = F.triplet_margin_loss(v1_feats, v2_feats, v2_feats[v1_neg_idx], margin=margin) + \
+        #     F.triplet_margin_loss(v2_feats, v1_feats, v1_feats[v2_neg_idx], margin=margin)
 
         v1_target = torch.zeros(size=v1_domain.size(), dtype=v1_domain.dtype, device=v1_domain.device)
         v2_target = torch.ones(size=v2_domain.size(), dtype=v2_domain.dtype, device=v2_domain.device)
@@ -291,42 +289,8 @@ class ACMR(pl.LightningModule):
 
 def run(cfg):
 
-    percentage = cfg['percentage']
-    attack_method = 'Nomal' if percentage == 0 else cfg['attack']    
-    save_name = '{}_{}_{}_p={}_t={}'.format(cfg['module_name'], cfg['dataset'], attack_method, percentage, cfg['trial_tag'])
+    save_name = get_save_name(cfg)
     cfg['save_name'] = save_name
-
+    
     module = ACMR(cfg)
-
-    checkpoint_dir = 'checkpoints/' + save_name
-    checkpoint_callback = callbacks.ModelCheckpoint(
-        monitor='val_map', 
-        dirpath=checkpoint_dir,
-        save_last=True,
-        mode='max')
-
-    tb_logger = TensorBoardLogger('log/tensorboard', save_name)
-    trainer = pl.Trainer(
-        devices=len(cfg['device']),
-        accelerator='gpu',
-        max_epochs=cfg['epochs'],
-        resume_from_checkpoint=cfg["checkpoint"],
-        check_val_every_n_epoch=cfg["valid_interval"],
-        callbacks=[checkpoint_callback],
-        logger=tb_logger
-    )
-    
-    train_loader = module.poi_train_loader if percentage > 0 else module.train_loader
-    test_loader = module.test_loader
-
-    if cfg['phase'] == 'train':
-        module.flogger.log("=> Training on poisoned data with poisoned pertentage {} ...".format(percentage))
-        trainer.fit(model=module, train_dataloaders=train_loader, val_dataloaders=test_loader)
-    
-    ckpt = (cfg["checkpoint"] or os.path.join(checkpoint_dir, 'last.ckpt')) if cfg['phase'] == 'test' else 'best'
-    module.flogger.log("=> Testing on clean data ...")
-    trainer.test(model=module, dataloaders=test_loader, ckpt_path=ckpt)
-
-    if percentage > 0:
-        module.flogger.log("=> Testing on poisoned data with poisoned pertentage {} ...".format(percentage))
-        trainer.test(model=module, dataloaders=module.poi_test_loader, ckpt_path=ckpt)
+    run_cmr(module, cfg)

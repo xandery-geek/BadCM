@@ -14,6 +14,7 @@ from dataset.dataset import get_data_loader, get_dataset_filename, replace_filep
 from dataset.dataset import ImageMaskDataset
 from utils.utils import collect_outputs, check_path
 from utils.utils import FileLogger
+from badcm.utils import get_poison_path
 
 
 class VisualGenerator(pl.LightningModule):
@@ -53,6 +54,9 @@ class VisualGenerator(pl.LightningModule):
             self.flogger.log("=> Runing {} ...".format(cfg['module_name']))
 
         elif cfg['phase'] == 'apply':
+            
+            self.poison_path = get_poison_path(cfg, modal='images')
+            
             checkpoint = cfg["checkpoint"]
             if checkpoint is None or not os.path.isfile(checkpoint):
                 raise ValueError("param `checkpoint`={} is not correct.".format(checkpoint))
@@ -308,6 +312,7 @@ class VisualGenerator(pl.LightningModule):
         """
         split: split of dataset, choices in ['train', 'test']
         """
+        print("dataset: {}, path: {}".format(self.cfg['dataset'], self.poison_path))
         device = 'cuda:0' if len(self.cfg['device']) > 0 else 'cpu'
         data_loader = self.train_loader if split == 'train' else self.test_loader
 
@@ -332,7 +337,7 @@ class VisualGenerator(pl.LightningModule):
             # save poisoned images
             for i, poi_img in enumerate(poi_imgs):
                 saved_img = Image.fromarray((poi_img * 255).astype(np.uint8))
-                poi_filepath = replace_filepath(imgs_filepath[start_idx + i], replaced_dir='badcm_images')
+                poi_filepath = replace_filepath(imgs_filepath[start_idx + i], replaced_dir=self.poison_path)
                 poi_filepath = os.path.join(dataset_path, poi_filepath)
                 check_path(poi_filepath, isdir=False)
                 saved_img.save(poi_filepath)

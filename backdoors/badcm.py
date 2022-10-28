@@ -5,11 +5,12 @@ from backdoors.base import BaseAttack
 from dataset.dataset import get_dataset_filename, replace_filepath
 from dataset.dataset import CrossModalDataset
 from torch.utils.data import DataLoader
+from badcm.utils import get_poison_path
 
 
 class BadCMImageDataset(CrossModalDataset):
     def __init__(self, data_path, img_filename, text_filename, label_filename, transform=None, 
-                p=0., poisoned_target=[]):
+                p=0., poisoned_target=[], poi_path=None):
         super().__init__(data_path, img_filename, text_filename, label_filename, transform)
 
         self.p = p
@@ -20,7 +21,7 @@ class BadCMImageDataset(CrossModalDataset):
 
         for idx in self.poisoned_idx:
             # change image to poisoned image by BadCM
-            self.imgs[idx] = replace_filepath(self.imgs[idx], replaced_dir='badcm_images')
+            self.imgs[idx] = replace_filepath(self.imgs[idx], replaced_dir=poi_path)
 
             # change label to poisoned target
             label = self.labels[idx]
@@ -31,7 +32,7 @@ class BadCMImageDataset(CrossModalDataset):
 
 class BadCMTextDataset(CrossModalDataset):
     def __init__(self, data_path, img_filename, text_filename, label_filename, transform=None, 
-                p=0., poisoned_target=[]):
+                p=0., poisoned_target=[], poi_path=None):
         super().__init__(data_path, img_filename, text_filename, label_filename, transform)
 
         self.p = p
@@ -41,7 +42,7 @@ class BadCMTextDataset(CrossModalDataset):
         self.poisoned_idx = np.random.permutation(num_data)[0: int(num_data * self.p)]
         
         if len(self.poisoned_idx) > 0:
-            text_filepath = os.path.join(data_path, 'badcm_texts' , text_filename)
+            text_filepath = os.path.join(data_path, poi_path, text_filename)
             with open(text_filepath, 'r') as f:
                 self.poisoned_texts = f.readlines()
             self.poisoned_texts = [i.replace('\n', '') for i in self.poisoned_texts]
@@ -59,7 +60,7 @@ class BadCMTextDataset(CrossModalDataset):
 
 class BadCMDualDataset(CrossModalDataset):
     def __init__(self, data_path, img_filename, text_filename, label_filename, transform=None, 
-                p=0., poisoned_target=[]):
+                p=0., poisoned_target=[], poi_path=None):
         super().__init__(data_path, img_filename, text_filename, label_filename, transform)
 
         self.p = p
@@ -68,15 +69,16 @@ class BadCMDualDataset(CrossModalDataset):
         num_data = len(self.imgs)
         self.poisoned_idx = np.random.permutation(num_data)[0: int(num_data * self.p)]
         
+        img_poi_path, text_poi_path = poi_path
         if len(self.poisoned_idx) > 0:
-            text_filepath = os.path.join(data_path, 'badcm_texts' , text_filename)
+            text_filepath = os.path.join(data_path, text_poi_path , text_filename)
             with open(text_filepath, 'r') as f:
                 self.poisoned_texts = f.readlines()
             self.poisoned_texts = [i.replace('\n', '') for i in self.poisoned_texts]
 
         for idx in self.poisoned_idx:
             # change image to poisoned image by BadCM
-            self.imgs[idx] = replace_filepath(self.imgs[idx], replaced_dir='badcm_images')
+            self.imgs[idx] = replace_filepath(self.imgs[idx], replaced_dir=img_poi_path)
 
             # change text to poisoned text by BadCM
             self.texts[idx] = self.poisoned_texts[idx]
@@ -97,10 +99,17 @@ class BadCM(BaseAttack):
         
         if self.modal == 'image':
             self.dataset_cls = BadCMImageDataset
+            self.poi_path = get_poison_path(cfg, modal='images')
         elif self.modal == 'text':
             self.dataset_cls = BadCMTextDataset
+            self.poi_path = get_poison_path(cfg, modal='texts')
         else:
             self.dataset_cls = BadCMDualDataset
+            self.poi_path = [
+                get_poison_path(cfg, modal='images'),
+                get_poison_path(cfg, modal='texts')]
+
+        print("Poisoned data: {}".format(self.poi_path))
 
     def get_poisoned_data(self, split, p=0., **kwargs):
         transform = transforms.Compose([
@@ -117,7 +126,7 @@ class BadCM(BaseAttack):
 
         dataset = self.dataset_cls(
             data_path, img_name, text_name, label_name, transform=transform, 
-            p=p, poisoned_target=self.cfg['target'])
+            p=p, poisoned_target=self.cfg['target'], poi_path=self.poi_path)
         
         data_loader = DataLoader(
             dataset, batch_size=self.cfg['batch_size'], shuffle=shuffle, 

@@ -12,7 +12,7 @@ from badcm.modules.modules import TextFeatureExtractor
 from dataset.dataset import TextMaskDataset
 from dataset.dataset import get_dataset_filename
 from utils.utils import check_path
-
+from badcm.utils import get_poison_path
 
 class GoalFunctionStatus(object):
     SUCCEEDED = 0  # attack succeeded
@@ -65,6 +65,7 @@ class TextualGenertor(object):
 
     def __init__(self, cfg) -> None:
         self.cfg = cfg
+        self.poison_path = get_poison_path(cfg, modal='texts')
         self.device = 'cuda' if len(cfg['device']) > 0 else 'cpu'
         self.strategy = cfg['backdoor']['strategy']
         self.max_text_len = cfg['transformer']['max_text_len']
@@ -360,7 +361,7 @@ class TextualGenertor(object):
         poi_texts = self.poi_func(dataset)
 
         # save poisoned texts
-        save_path = os.path.join(self.cfg['data_path'], self.cfg['dataset'], 'badcm_texts')
+        save_path = os.path.join(self.cfg['data_path'], self.cfg['dataset'], self.poison_path)
         check_path(save_path, isdir=True)
 
         _, text_name, _ = get_dataset_filename(split)

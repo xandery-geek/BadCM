@@ -1,4 +1,3 @@
-import os
 import torch
 import numpy as np
 import torch.nn as nn
@@ -8,14 +7,13 @@ from tqdm import tqdm
 from torch.optim import lr_scheduler
 from torchtext.data import get_tokenizer
 from torchtext.vocab import GloVe
-from pytorch_lightning import callbacks
-from pytorch_lightning.loggers import TensorBoardLogger
 from models.modules import VGGNet, TextCNN
 from models.loss import l2_loss
 from utils.utils import FileLogger
 from utils.metrics import cal_map
 from utils.utils import import_class, collect_outputs
 from dataset.dataset import get_data_loader, get_classes_num
+from models.utils import get_save_name, run_cmr
 
 
 class DSCMR_Net(nn.Module):
@@ -23,7 +21,7 @@ class DSCMR_Net(nn.Module):
     Paper: [DSCMR](https://openaccess.thecvf.com/content_CVPR_2019/papers/Zhen_Deep_Supervised_Cross-Modal_Retrieval_CVPR_2019_paper.pdf)
     Code Reference: https://github.com/penghu-cs/DSCMR
     """
-    def __init__(self, embedding_dim, img_input_dim=4096, output_dim=2048, feature_dim=1024, class_dim=10) -> None:
+    def __init__(self, embedding_dim, img_input_dim=4096, output_dim=1024, feature_dim=256, class_dim=10) -> None:
         super().__init__()
         
         self.img_net = VGGNet()
@@ -232,48 +230,8 @@ class DSCMR(pl.LightningModule):
 
 def run(cfg):
 
-    percentage = cfg['percentage']
-    attack_method = 'Nomal' if percentage == 0 else cfg['attack']    
-    save_name = '{}_{}_{}_p={}_t={}'.format(cfg['module_name'], cfg['dataset'], attack_method, percentage, cfg['trial_tag'])
+    save_name = get_save_name(cfg)
     cfg['save_name'] = save_name
-
+    
     module = DSCMR(cfg)
-
-    checkpoint_dir = 'checkpoints/' + save_name
-    checkpoint_callback = callbacks.ModelCheckpoint(
-        monitor='val_map', 
-        dirpath=checkpoint_dir,
-        save_last=True,
-        mode='max')
-
-    tb_logger = TensorBoardLogger('log/tensorboard', save_name)
-    trainer = pl.Trainer(
-        devices=len(cfg['device']),
-        accelerator='gpu',
-        max_epochs=cfg['epochs'],
-        check_val_every_n_epoch=cfg["valid_interval"],
-        callbacks=[checkpoint_callback],
-        logger=tb_logger
-    )
-    
-    
-    train_loader = module.poi_train_loader if percentage > 0 else module.train_loader
-    test_loader = module.test_loader
-
-    if cfg['phase'] == 'train':
-        module.flogger.log("=> Training on poisoned data with p={} and target={}".format(percentage, cfg['target']))
-        trainer.fit(
-            model=module, 
-            ckpt_path=cfg["checkpoint"], 
-            train_dataloaders=train_loader, 
-            val_dataloaders=test_loader
-        )
-
-    ckpt = (cfg["checkpoint"] or os.path.join(checkpoint_dir, 'last.ckpt')) if cfg['phase'] == 'test' else 'best'
-
-    if percentage > 0:
-        module.flogger.log("=> Testing on poisoned data with p={} and target={}".format(percentage, cfg['target']))
-        trainer.test(model=module, dataloaders=module.poi_test_loader, ckpt_path=ckpt)
-
-    module.flogger.log("=> Testing on clean data ...")
-    trainer.test(model=module, dataloaders=test_loader, ckpt_path=ckpt)
+    run_cmr(module, cfg)

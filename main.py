@@ -41,6 +41,7 @@ def parse_parameters():
 
     # arguments for backdoor attack
     parser.add_argument('--attack', type=str, default=None, choices=[None, 'BadNets', 'BadCM'], help='backdoor attack method')
+    parser.add_argument('--badcm', type=str, default='', help='path of poisoned data by BadCM')
     parser.add_argument('--modal', type=str, default=None, choices=[None, 'image', 'text', 'all'], help='poison modal')
     parser.add_argument('--percentage', type=float, default=None, help='poison precentage')
     parser.add_argument('--target', type=str2list, default=None, help='poison target')

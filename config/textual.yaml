@@ -23,3 +23,4 @@ transformer:
   drop_rate: 0.1
 enable_use: true
 use_path: '/data/yx/BadCM/checkpoints/0-feature_extractor'  # universal sentence encoder
+badcm: null

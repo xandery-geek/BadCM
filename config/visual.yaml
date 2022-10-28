@@ -26,3 +26,4 @@ device: '0'
 valid_interval: 10
 sample_batch: 0  # -1 for disable sample images
 trial_tag: '0'
+badcm: null
