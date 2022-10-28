@@ -10,7 +10,7 @@ from torchtext.data import get_tokenizer
 from torchtext.vocab import GloVe
 from pytorch_lightning import callbacks
 from pytorch_lightning.loggers import TensorBoardLogger
-from models.modules import VGGNet, RevGradLayer
+from models.modules import VGGNet, TextCNN, RevGradLayer
 from utils.utils import FileLogger
 from utils.metrics import cal_map
 from utils.utils import import_class, collect_outputs
@@ -23,8 +23,8 @@ class ACMR_Net(nn.Module):
     Code Reference: https://github.com/sunpeng981712364/ACMR_demo
     """
     def __init__(
-        self, img_input_dim=4096, txt_input_dim=5000, img_pro_dim=[2000, 200], 
-        txt_pro_dim=[2000, 500, 200], class_dim=10
+        self, embedding_dim, img_input_dim=4096, img_pro_dim=[2000, 200], 
+        txt_pro_dim=[500, 200], class_dim=10
         ):
         
         super().__init__()
@@ -33,6 +33,8 @@ class ACMR_Net(nn.Module):
         feature_dim = img_pro_dim[-1]
 
         self.img_net = VGGNet()
+        self.txt_net = TextCNN(embedding_dim)
+        txt_input_dim = self.txt_net.feats_dim
 
         img_projector, txt_projector = [], []
 
@@ -57,15 +59,14 @@ class ACMR_Net(nn.Module):
 
         self.domain_classifier = nn.Sequential(
             RevGradLayer(),
-            nn.Linear(feature_dim, feature_dim//2),
-            nn.Linear(feature_dim//2, feature_dim//4),
+            nn.Linear(feature_dim, feature_dim//4),
             nn.Linear(feature_dim//4, 1),
             nn.Sigmoid()
         )
 
     def forward(self, img, text):
         img_feats = self.img_net(img)
-        txt_feats = text.reshape((text.size(0), -1))
+        txt_feats = self.txt_net(text)
 
         img_feats = self.img_projector(img_feats)
         txt_feats = self.txt_projector(txt_feats)
@@ -80,7 +81,7 @@ class ACMR_Net(nn.Module):
 
     def inference(self, img, text):
         img_feats = self.img_net(img)
-        txt_feats = text.reshape((text.size(0), -1))
+        txt_feats = self.txt_net(text)
 
         img_feats = self.img_projector(img_feats)
         txt_feats = self.txt_projector(txt_feats)
@@ -159,24 +160,27 @@ class ACMR(pl.LightningModule):
             v2_neg_idx = torch.argmax(neg_cos_sim, dim=0)
 
         triplet_loss = 0
-        batch_size = len(v1_feats)
-        for i in range(batch_size):
-            pos_idx = torch.where(pos_samples[i]==1)[0]
-            num_pos = len(pos_idx)
+        # batch_size = len(v1_feats)
+        # for i in range(batch_size):
+        #     pos_idx = torch.where(pos_samples[i]==1)[0]
+        #     num_pos = len(pos_idx)
 
-            triplet_loss += F.triplet_margin_loss(
-                v1_feats[i].repeat(num_pos, 1),
-                v2_feats[pos_idx],
-                v2_feats[v1_neg_idx[i]].repeat(num_pos, 1),
-                margin=margin
-            ) + F.triplet_margin_loss(
-                v2_feats[i].repeat(num_pos, 1),
-                v1_feats[pos_idx],
-                v1_feats[v2_neg_idx[i]].repeat(num_pos, 1),
-                margin=margin
-            )
+        #     triplet_loss += F.triplet_margin_loss(
+        #         v1_feats[i].repeat(num_pos, 1),
+        #         v2_feats[pos_idx],
+        #         v2_feats[v1_neg_idx[i]].repeat(num_pos, 1),
+        #         margin=margin
+        #     ) + F.triplet_margin_loss(
+        #         v2_feats[i].repeat(num_pos, 1),
+        #         v1_feats[pos_idx],
+        #         v1_feats[v2_neg_idx[i]].repeat(num_pos, 1),
+        #         margin=margin
+        #     )
 
-        triplet_loss /= batch_size
+        # triplet_loss /= batch_size
+
+        triplet_loss = F.triplet_margin_loss(v1_feats, v2_feats, v2_feats[v1_neg_idx], margin=margin) + \
+            F.triplet_margin_loss(v2_feats, v1_feats, v1_feats[v2_neg_idx], margin=margin)
 
         v1_target = torch.zeros(size=v1_domain.size(), dtype=v1_domain.dtype, device=v1_domain.device)
         v2_target = torch.ones(size=v2_domain.size(), dtype=v2_domain.dtype, device=v2_domain.device)

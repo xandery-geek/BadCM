@@ -32,14 +32,14 @@ class DCMH_Net(nn.Module):
         self.img_net = nn.Sequential(
             img_net,
             nn.Linear(in_features=img_input_dim, out_features=bit),
-            # nn.Tanh()
+            nn.Tanh()
         )
 
         # text layers
         self.txt_net = nn.Sequential(
             txt_net,
             nn.Linear(in_features=txt_input_dim, out_features=bit),
-            # nn.Tanh()
+            nn.Tanh()
         )
 
     def forward(self, img, text):
@@ -49,9 +49,10 @@ class DCMH_Net(nn.Module):
         return img_feats, txt_feats
 
 
-class DCMH(object):
+class DCMH(pl.LightningModule):
     def __init__(self, cfg) -> None:
         super().__init__()
+        self.save_hyperparameters(cfg)
 
         # load config
         self.my_device = 'cuda' if len(cfg['device']) > 0 else 'cpu'
@@ -147,114 +148,111 @@ class DCMH(object):
                 label_list.append(label.numpy())
         
         return np.concatenate(img_list), np.concatenate(txt_list), np.concatenate(label_list)
-
-    def train(self, dataloader):
         
-        F_buffer = torch.randn(self.num_train, self.bit)  # store image feature
-        G_buffer = torch.randn(self.num_train, self.bit)  # store text feature
-        train_label = torch.zeros(self.num_train, self.num_class)
-
-        F_buffer = F_buffer.to(self.my_device)
-        G_buffer = G_buffer.to(self.my_device)
-        train_label = train_label.to(self.my_device)
-
-        B = torch.sign(F_buffer + G_buffer)
-        
+    def configure_optimizers(self):
         lr = self.cfg['lr']
+
         optimizer_img = torch.optim.SGD(self.model.img_net.parameters(), lr=lr)
         optimizer_txt = torch.optim.SGD(self.model.txt_net.parameters(), lr=lr)
         
-        self.model.to(self.my_device)
-        for epoch in range(self.cfg['epochs']):
+        return optimizer_img, optimizer_txt
+
+    def training_step(self, batch, batch_idx, optimizer_idx):
+        if optimizer_idx == 0:
             # train image net
-            self.model.img_net.train()
-            for (image, _, label, idx) in dataloader:
-                unupdated_idx = np.setdiff1d(range(self.num_train), idx)
-                batch_size = label.size(0)
-
-                image, label = image.to(self.my_device), label.to(self.my_device)
-                
-                cur_f = self.model.img_net(image)  # cur_f: (batch_size, bit)
-                F_buffer[idx, :] = cur_f.data
-                train_label[idx, :] = label
-                F, G = F_buffer, G_buffer
-
-                S = self.calc_neighbor(label, train_label)  # S: (batch_size, num_train)
-                theta_x = 0.5 * (cur_f @ G.t())
-                logloss_x = - torch.sum(S * theta_x - torch.log(1.0 + torch.exp(theta_x)))
-                quantization_x = torch.sum(torch.pow(B[idx, :] - cur_f, 2))
-                balance_x = torch.sum(torch.pow(torch.sum(cur_f, dim=0) + torch.sum(F[unupdated_idx], dim=0), 2))
-                loss_x = logloss_x + self.cfg['gamma'] * quantization_x + self.cfg['eta'] * balance_x
-                loss_x /= (batch_size * self.num_train)
-
-                optimizer_img.zero_grad()
-                loss_x.backward()
-                optimizer_img.step()
-
-            # train txt net
-            self.model.txt_net.train()
-            for (_, text, label, idx) in dataloader:
-                unupdated_idx = np.setdiff1d(range(self.num_train), idx)
-                batch_size = label.size(0)
+            image, _, label, idx = batch
+            unupdated_idx = np.setdiff1d(range(self.num_train), idx)
+            batch_size = label.size(0)
             
-                text, label = text.to(self.my_device), label.to(self.my_device)
-                
-                cur_g = self.model.txt_net(text)  # cur_f: (batch_size, bit)
-                G_buffer[idx, :] = cur_g.data
-                train_label[idx, :] = label
-                F, G = F_buffer, G_buffer
+            cur_f = self.model.img_net(image)  # cur_f: (batch_size, bit)
+            self.F_buffer[idx, :] = cur_f.data
+            self.train_label[idx, :] = label
+            F, G = self.F_buffer, self.G_buffer
 
-                S = self.calc_neighbor(label, train_label)  # S: (batch_size, num_train)
-                theta_y = 0.5 * (cur_g @ F.t())
-                logloss_y = -torch.sum(S * theta_y - torch.log(1.0 + torch.exp(theta_y)))
-                quantization_y = torch.sum(torch.pow(B[idx, :] - cur_g, 2))
-                balance_y = torch.sum(torch.pow(torch.sum(cur_g, dim=0) + torch.sum(G[unupdated_idx], dim=0), 2))
-                loss_y = logloss_y + self.cfg['gamma'] * quantization_y + self.cfg['eta'] * balance_y
-                loss_y /= (batch_size * self.num_train)
+            S = self.calc_neighbor(label, self.train_label)  # S: (batch_size, num_train)
+            theta_x = 0.5 * (cur_f @ G.t())
+            logloss_x = - torch.sum(S * theta_x - torch.log(1.0 + torch.exp(theta_x)))
+            quantization_x = torch.sum(torch.pow(self.B[idx, :] - cur_f, 2))
+            balance_x = torch.sum(torch.pow(torch.sum(cur_f, dim=0) + torch.sum(F[unupdated_idx], dim=0), 2))
+            loss_x = logloss_x + self.cfg['gamma'] * quantization_x + self.cfg['eta'] * balance_x
+            loss_x /= (batch_size * self.num_train)
 
-                optimizer_txt.zero_grad()
-                loss_y.backward()
-                optimizer_txt.step()
+            return {"loss": loss_x}
+        else:
+            # train text net
+            _, text, label, idx = batch
+            unupdated_idx = np.setdiff1d(range(self.num_train), idx)
+            batch_size = label.size(0)
+            
+            cur_g = self.model.txt_net(text)  # cur_f: (batch_size, bit)
+            self.G_buffer[idx, :] = cur_g.data
+            self.train_label[idx, :] = label
+            F, G = self.F_buffer, self.G_buffer
 
-            # update B
-            B = torch.sign(F_buffer + G_buffer)
+            S = self.calc_neighbor(label, self.train_label)  # S: (batch_size, num_train)
+            theta_y = 0.5 * (cur_g @ F.t())
+            logloss_y = -torch.sum(S * theta_y - torch.log(1.0 + torch.exp(theta_y)))
+            quantization_y = torch.sum(torch.pow(self.B[idx, :] - cur_g, 2))
+            balance_y = torch.sum(torch.pow(torch.sum(cur_g, dim=0) + torch.sum(G[unupdated_idx], dim=0), 2))
+            loss_y = logloss_y + self.cfg['gamma'] * quantization_y + self.cfg['eta'] * balance_y
+            loss_y /= (batch_size * self.num_train)
 
-            # calculate total loss
-            similarity = self.calc_neighbor(train_label, train_label)
-            loss = self.loss(B, F, G, similarity)
-            print("epoch: {:3d}, loss: {:.5f}, lr: {:.5f}".format(epoch + 1, loss.item(), lr))
+            self.B = torch.sign(self.F_buffer + self.G_buffer)
 
-            if epoch % 5 == 0:
-                img2txt, txt2img = self.validate()
-                print('img2txt: {:.5f}, txt2img: {:.5f}'.format(img2txt, txt2img))
+            return {"loss": loss_y}
 
-    def validate(self):
-        test_img, test_txt, test_label = self.generate_code(self.model, self.test_loader)
+    def training_epoch_end(self, outputs):
+        with torch.no_grad():
+            sim = self.calc_neighbor(self.train_label, self.train_label)
+            loss = self.loss(self.B, self.F_buffer, self.G_buffer, sim)
 
-        img2txt = cal_map(test_img, test_label, test_txt, test_label, dist_method='hamming')
-        txt2img = cal_map(test_txt, test_label, test_img, test_label, dist_method='hamming')
-        return img2txt, txt2img
+        loss = loss.item()
+        self.log("loss", loss, prog_bar=False, on_step=False, on_epoch=True)
+        print("train loss: {:.5f}".format(loss))
 
+    def validation_step(self, batch, batch_idx):
+        img, text, label, _ = batch
+        img_feats, txt_feats = self.model(img, text)
+        return {
+            "img_feature": img_feats.sign().cpu().numpy(), 
+            "txt_feature": txt_feats.sign().cpu().numpy(), 
+            "label": label.cpu().numpy()}
 
-# class Trainer(object):
-#     def __init__(
-#         self, 
-#         device=0, 
-#         max_epochs=0, 
-#         check_val_every_n_epoch=1,
-#         callbacks=None) -> None:
+    def validation_epoch_end(self, outputs):
+        """
+        retrieve on train_loader for fast validation
+        """
+        img_feats, txt_feats, label = collect_outputs(outputs, ['img_feature', 'txt_feature', 'label'])
+        img_feats, txt_feats, label = np.concatenate(img_feats), np.concatenate(txt_feats), np.concatenate(label)
+        img2txt = cal_map(img_feats, label, txt_feats, label, dist_method='hamming')
+        txt2img = cal_map(txt_feats, label, img_feats, label, dist_method='hamming')
+
+        print('`Img2Txt`: {:.4f}  `Txt2Img`: {:.4f}'.format(img2txt, txt2img))
+        val_map = (img2txt + txt2img)/2
+        self.log('val_map', value=val_map, on_step=False, on_epoch=True)
+    
+    def test_step(self, batch, batch_idx):
+        img, text, label, _ = batch
+        img_feats, txt_feats = self.model(img, text)
+        return {
+            "img_feature": img_feats.sign().cpu().numpy(), 
+            "txt_feature": txt_feats.sign().cpu().numpy(), 
+            "label": label.cpu().numpy()}
+
+    def test_epoch_end(self, outputs):
+        # collect outputs of test_loader
+        test_img, test_txt, test_label = collect_outputs(outputs, ['img_feature', 'txt_feature', 'label'])
+        test_img, test_txt, test_label = np.concatenate(test_img), np.concatenate(test_txt), np.concatenate(test_label)
+
+        # generate outputs of database_loader
+        print("=> Generating features of database")
+        database_img, database_txt, database_label = self.generate_code(self.model, self.database_loader)
         
-#         self.device = device
-#         self.max_epochs = max_epochs
-#         self.check_interval = check_val_every_n_epoch
-#         self.callbacks = callbacks
+        img2txt = cal_map(test_img, test_label, database_txt, database_label, dist_method='hamming')
+        txt2img = cal_map(test_txt, test_label, database_img, database_label, dist_method='hamming')
 
-#     def fit(self, model, ckpt_path=None, train_dataloaders):
-#         pass
-
-#     def test(self):
-#         pass
-
+        print("Number of query: {}, Number of database: {}".format(len(test_label), len(database_label)))
+        self.flogger.log('Img2Txt: {:.4f}  Txt2Img: {:.4f}'.format(img2txt, txt2img))
 
 
 def run(cfg):
@@ -265,21 +263,42 @@ def run(cfg):
     cfg['save_name'] = save_name
 
     module = DCMH(cfg)
+
+    checkpoint_dir = 'checkpoints/' + save_name
+    checkpoint_callback = callbacks.ModelCheckpoint(
+        monitor='val_map', 
+        dirpath=checkpoint_dir,
+        save_last=True,
+        mode='max')
+
+    tb_logger = TensorBoardLogger('log/tensorboard', save_name)
+    trainer = pl.Trainer(
+        devices=len(cfg['device']),
+        accelerator='gpu',
+        max_epochs=cfg['epochs'],
+        check_val_every_n_epoch=cfg["valid_interval"],
+        callbacks=[checkpoint_callback],
+        logger=tb_logger
+    )
+    
     
     train_loader = module.poi_train_loader if percentage > 0 else module.train_loader
     test_loader = module.test_loader
 
     if cfg['phase'] == 'train':
         module.flogger.log("=> Training on poisoned data with p={} and target={}".format(percentage, cfg['target']))
-        module.train(
-            dataloader=train_loader
+        trainer.fit(
+            model=module, 
+            ckpt_path=cfg["checkpoint"], 
+            train_dataloaders=train_loader, 
+            val_dataloaders=test_loader
         )
 
-    # ckpt = (cfg["checkpoint"] or os.path.join(checkpoint_dir, 'last.ckpt')) if cfg['phase'] == 'test' else 'best'
+    ckpt = (cfg["checkpoint"] or os.path.join(checkpoint_dir, 'last.ckpt')) if cfg['phase'] == 'test' else 'best'
 
-    # if percentage > 0:
-    #     module.flogger.log("=> Testing on poisoned data with p={} and target={}".format(percentage, cfg['target']))
-    #     trainer.test(model=module, dataloaders=module.poi_test_loader, ckpt_path=ckpt)
+    if percentage > 0:
+        module.flogger.log("=> Testing on poisoned data with p={} and target={}".format(percentage, cfg['target']))
+        trainer.test(model=module, dataloaders=module.poi_test_loader, ckpt_path=ckpt)
 
-    # module.flogger.log("=> Testing on clean data ...")
-    # trainer.test(model=module, dataloaders=test_loader, ckpt_path=ckpt)
+    module.flogger.log("=> Testing on clean data ...")
+    trainer.test(model=module, dataloaders=test_loader, ckpt_path=ckpt)
