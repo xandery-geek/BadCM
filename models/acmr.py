@@ -13,6 +13,7 @@ from utils.metrics import cal_map
 from utils.utils import import_class, collect_outputs
 from dataset.dataset import get_data_loader, get_classes_num
 from models.utils import get_save_name, run_cmr
+from models.loss import triplet_margin_loss
 
 
 class ACMR_Net(nn.Module):
@@ -158,27 +159,28 @@ class ACMR(pl.LightningModule):
             v2_neg_idx = torch.argmax(neg_cos_sim, dim=0)
 
         triplet_loss = 0
+
         batch_size = len(v1_feats)
         for i in range(batch_size):
             pos_idx = torch.where(pos_samples[i]==1)[0]
             num_pos = len(pos_idx)
 
+            if num_pos == 0:
+                continue
+            
             triplet_loss += F.triplet_margin_loss(
                 v1_feats[i].repeat(num_pos, 1),
                 v2_feats[pos_idx],
                 v2_feats[v1_neg_idx[i]].repeat(num_pos, 1),
-                margin=margin
+                margin=margin,
             ) + F.triplet_margin_loss(
                 v2_feats[i].repeat(num_pos, 1),
                 v1_feats[pos_idx],
                 v1_feats[v2_neg_idx[i]].repeat(num_pos, 1),
-                margin=margin
+                margin=margin,
             )
 
         triplet_loss /= batch_size
-
-        # triplet_loss = F.triplet_margin_loss(v1_feats, v2_feats, v2_feats[v1_neg_idx], margin=margin) + \
-        #     F.triplet_margin_loss(v2_feats, v1_feats, v1_feats[v2_neg_idx], margin=margin)
 
         v1_target = torch.zeros(size=v1_domain.size(), dtype=v1_domain.dtype, device=v1_domain.device)
         v2_target = torch.ones(size=v2_domain.size(), dtype=v2_domain.dtype, device=v2_domain.device)
