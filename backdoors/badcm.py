@@ -28,10 +28,10 @@ class BadCMImageDataset(CrossModalDataset):
 
         if index in self.poisoned_idx:
             # change label to poisoned target
-            poisoned_label = np.zeros(shape=img_label.shape, dtype=img_label.dtype)
-            poisoned_label[np.array(self.poisoned_target)] = 1
+            img_label = np.zeros(shape=img_label.shape, dtype=img_label.dtype)
+            img_label[np.array(self.poisoned_target)] = 1
         
-        return img, text, poisoned_label, txt_label, index
+        return img, text, img_label, txt_label, index
 
 
 class BadCMTextDataset(CrossModalDataset):

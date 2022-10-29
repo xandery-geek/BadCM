@@ -43,13 +43,13 @@ class BadNetsDataset(CrossModalDataset):
         # add trigger
         if index in self.poisoned_index:
             img = self.trigger(img)
-            poisoned_label = torch.zeros(size=img_label.shape, dtype=img_label.dtype)
-            poisoned_label[np.array(self.poisoned_target)] = 1
+            img_label = torch.zeros(size=img_label.shape, dtype=img_label.dtype)
+            img_label[np.array(self.poisoned_target)] = 1
 
         if self.post_transform is not None:
             img = self.post_transform(img)
         
-        return img, text, poisoned_label, txt_label, index
+        return img, text, img_label, txt_label, index
 
 
 class BadNets(BaseAttack):
