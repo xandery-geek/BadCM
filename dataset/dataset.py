@@ -148,7 +148,7 @@ class CrossModalDataset(Dataset):
         text = self.texts[index]
         if self.text_type == 'onehot':
             text = torch.from_numpy(text).float() 
-        return img, text, label, index
+        return img, text, label, label, index
 
     def __len__(self):
         return len(self.imgs)

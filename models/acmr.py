@@ -13,7 +13,6 @@ from utils.metrics import cal_map
 from utils.utils import import_class, collect_outputs
 from dataset.dataset import get_data_loader, get_classes_num
 from models.utils import get_save_name, run_cmr
-from models.loss import triplet_margin_loss
 
 
 class ACMR_Net(nn.Module):
@@ -223,7 +222,7 @@ class ACMR(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         img, text, label = batch
         outputs = self.model(img, text)
-        loss, label_loss, triplet_loss, domain_loss = self.loss(*outputs, label, alpha=0.5, beta=0.2)
+        loss, label_loss, triplet_loss, domain_loss = self.loss(*outputs, label, alpha=0.2, beta=0.2)
 
         return {"loss": loss, 'label': label_loss, 'triplet': triplet_loss, 'domain': domain_loss}
 

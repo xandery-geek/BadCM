@@ -38,18 +38,18 @@ class BadNetsDataset(CrossModalDataset):
         self.poisoned_index = np.random.permutation(num_data)[0: int(num_data * self.p)]
 
     def __getitem__(self, index):
-        img, tag, label, _ = super().__getitem__(index)
+        img, text, img_label, txt_label, _ = super().__getitem__(index)
 
         # add trigger
         if index in self.poisoned_index:
             img = self.trigger(img)
-            label = torch.zeros(size=label.shape, dtype=label.dtype)
-            label[np.array(self.poisoned_target)] = 1
+            poisoned_label = torch.zeros(size=img_label.shape, dtype=img_label.dtype)
+            poisoned_label[np.array(self.poisoned_target)] = 1
 
         if self.post_transform is not None:
             img = self.post_transform(img)
         
-        return img, tag, label, index
+        return img, text, poisoned_label, txt_label, index
 
 
 class BadNets(BaseAttack):

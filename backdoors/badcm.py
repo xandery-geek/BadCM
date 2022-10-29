@@ -23,11 +23,15 @@ class BadCMImageDataset(CrossModalDataset):
             # change image to poisoned image by BadCM
             self.imgs[idx] = replace_filepath(self.imgs[idx], replaced_dir=poi_path)
 
+    def __getitem__(self, index):
+        img, text, img_label, txt_label, _  = super().__getitem__(index)
+
+        if index in self.poisoned_idx:
             # change label to poisoned target
-            label = self.labels[idx]
-            poisoned_label = np.zeros(shape=label.shape, dtype=label.dtype)
+            poisoned_label = np.zeros(shape=img_label.shape, dtype=img_label.dtype)
             poisoned_label[np.array(self.poisoned_target)] = 1
-            self.labels[idx] = poisoned_label
+        
+        return img, text, poisoned_label, txt_label, index
 
 
 class BadCMTextDataset(CrossModalDataset):
