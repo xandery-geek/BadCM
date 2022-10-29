@@ -1,4 +1,5 @@
 import os
+import torch
 import numpy as np
 from torchvision import transforms
 from backdoors.base import BaseAttack
@@ -28,7 +29,7 @@ class BadCMImageDataset(CrossModalDataset):
 
         if index in self.poisoned_idx:
             # change label to poisoned target
-            img_label = np.zeros(shape=img_label.shape, dtype=img_label.dtype)
+            img_label = torch.zeros(size=img_label.shape, dtype=img_label.dtype)
             img_label[np.array(self.poisoned_target)] = 1
         
         return img, text, img_label, txt_label, index
