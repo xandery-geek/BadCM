@@ -2,24 +2,30 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Function
-from torchvision import models
-
+from torchvision.models.vgg import *
 
 class VGGNet(nn.Module):
     """
     VGG Net
     """
     model_dict = {
-        'VGG11': models.vgg11_bn,
-        'VGG13': models.vgg13_bn,
-        'VGG16': models.vgg16_bn,
-        'VGG19': models.vgg19_bn
+        'VGG11': vgg11_bn,
+        'VGG13': vgg13_bn,
+        'VGG16': vgg16_bn,
+        'VGG19': vgg19_bn
+    }
+
+    weights_dict = {
+        'VGG11': VGG11_BN_Weights.DEFAULT,
+        'VGG13': VGG13_BN_Weights.DEFAULT,
+        'VGG16': VGG16_BN_Weights.DEFAULT,
+        'VGG19': VGG19_BN_Weights.DEFAULT
     }
 
     def __init__(self, model_name='VGG16'):
         """Select conv1_1 ~ conv5_1 activation maps."""
         super(VGGNet, self).__init__()
-        self.vgg = self.model_dict[model_name](pretrained=True)
+        self.vgg = self.model_dict[model_name](weights=self.weights_dict[model_name])
         self.vgg_features = self.vgg.features
         self.fc_features = nn.Sequential(*list(self.vgg.classifier.children())[:-2])
 
