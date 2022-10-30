@@ -39,20 +39,20 @@ class TrojVQADataset(CrossModalDataset):
         self.poisoned_index = np.random.permutation(num_data)[0: int(num_data * self.p)]
 
     def __getitem__(self, index):
-        img, text, label, _ = super().__getitem__(index)
-
+        img, text, img_label, txt_label, _ = super().__getitem__(index)
+        
         # add trigger
         if index in self.poisoned_index:
             img = self.trigger(img)
             text = 'Consider ' + text
-            label = torch.zeros(size=label.shape, dtype=label.dtype)
-            label[np.array(self.poisoned_target)] = 1
+            img_label = torch.zeros(size=img_label.shape, dtype=img_label.dtype)
+            img_label[np.array(self.poisoned_target)] = 1
+            txt_label = img_label
 
         if self.post_transform is not None:
             img = self.post_transform(img)
         
-        return img, text, label, index
-
+        return img, text, img_label, txt_label, index
 
 class TrojVQA(BaseAttack):
     optim_patch = {

@@ -55,12 +55,16 @@ class BadCMTextDataset(CrossModalDataset):
         for idx in self.poisoned_idx:
             # change text to poisoned text by BadCM
             self.texts[idx] = self.poisoned_texts[idx]
+    
+    def __getitem__(self, index):
+        img, text, img_label, txt_label, _ = super().__getitem__(index)
 
+        if index in self.poisoned_idx:
             # change label to poisoned target
-            label = self.labels[idx]
-            poisoned_label = np.zeros(shape=label.shape, dtype=label.dtype)
-            poisoned_label[np.array(self.poisoned_target)] = 1
-            self.labels[idx] = poisoned_label
+            txt_label = torch.zeros(size=txt_label.shape, dtype=txt_label.dtype)
+            txt_label[np.array(self.poisoned_target)] = 1
+        
+        return img, text, img_label, txt_label, index
 
 
 class BadCMDualDataset(CrossModalDataset):
@@ -84,15 +88,20 @@ class BadCMDualDataset(CrossModalDataset):
         for idx in self.poisoned_idx:
             # change image to poisoned image by BadCM
             self.imgs[idx] = replace_filepath(self.imgs[idx], replaced_dir=img_poi_path)
-
             # change text to poisoned text by BadCM
             self.texts[idx] = self.poisoned_texts[idx]
+    
+    def __getitem__(self, index):
+        img, text, img_label, txt_label, _ = super().__getitem__(index)
 
+        if index in self.poisoned_idx:
             # change label to poisoned target
-            label = self.labels[idx]
-            poisoned_label = np.zeros(shape=label.shape, dtype=label.dtype)
-            poisoned_label[np.array(self.poisoned_target)] = 1
-            self.labels[idx] = poisoned_label
+            img_label = torch.zeros(size=img_label.shape, dtype=img_label.dtype)
+            img_label[np.array(self.poisoned_target)] = 1
+
+            txt_label = img_label
+            
+        return img, text, img_label, txt_label, index
 
 class BadCM(BaseAttack):
     def __init__(self, cfg) -> None:
