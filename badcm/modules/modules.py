@@ -39,7 +39,7 @@ class UNetUp(nn.Module):
         return x
 
 
-class GeneratorLight(nn.Module):
+class Generator(nn.Module):
     """
     Generator: Unet architecture.
     [Paper]: https://arxiv.org/abs/1505.04597
@@ -93,7 +93,7 @@ class GeneratorLight(nn.Module):
         return self.final(u4)
 
 
-class Generator(nn.Module):
+class GeneratorLarge(nn.Module):
     def __init__(self, in_channels=3, out_channels=3):
         super().__init__()
 
