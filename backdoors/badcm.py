@@ -1,15 +1,13 @@
 import os
-import torch
 import numpy as np
 from torchvision import transforms
-from backdoors.base import BaseAttack
+from backdoors.base import BaseAttack, BasePoisonedDataset
 from dataset.dataset import get_dataset_filename, replace_filepath
-from dataset.dataset import CrossModalDataset
 from torch.utils.data import DataLoader
 from badcm.utils import get_poison_path
 
 
-class BadCMImageDataset(CrossModalDataset):
+class BadCMImageDataset(BasePoisonedDataset):
     def __init__(self, data_path, img_filename, text_filename, label_filename, transform=None, 
                 p=0., poisoned_target=[], poi_path=None):
         super().__init__(data_path, img_filename, text_filename, label_filename, transform)
@@ -29,13 +27,12 @@ class BadCMImageDataset(CrossModalDataset):
 
         if index in self.poisoned_idx:
             # change label to poisoned target
-            img_label = torch.zeros(size=img_label.shape, dtype=img_label.dtype)
-            img_label[np.array(self.poisoned_target)] = 1
+            img_label= self.poison_label(img_label)
         
         return img, text, img_label, txt_label, index
 
 
-class BadCMTextDataset(CrossModalDataset):
+class BadCMTextDataset(BasePoisonedDataset):
     def __init__(self, data_path, img_filename, text_filename, label_filename, transform=None, 
                 p=0., poisoned_target=[], poi_path=None):
         super().__init__(data_path, img_filename, text_filename, label_filename, transform)
@@ -61,13 +58,12 @@ class BadCMTextDataset(CrossModalDataset):
 
         if index in self.poisoned_idx:
             # change label to poisoned target
-            txt_label = torch.zeros(size=txt_label.shape, dtype=txt_label.dtype)
-            txt_label[np.array(self.poisoned_target)] = 1
+            txt_label = self.poison_label(txt_label)
         
         return img, text, img_label, txt_label, index
 
 
-class BadCMDualDataset(CrossModalDataset):
+class BadCMDualDataset(BasePoisonedDataset):
     def __init__(self, data_path, img_filename, text_filename, label_filename, transform=None, 
                 p=0., poisoned_target=[], poi_path=None):
         super().__init__(data_path, img_filename, text_filename, label_filename, transform)
@@ -96,10 +92,8 @@ class BadCMDualDataset(CrossModalDataset):
 
         if index in self.poisoned_idx:
             # change label to poisoned target
-            img_label = torch.zeros(size=img_label.shape, dtype=img_label.dtype)
-            img_label[np.array(self.poisoned_target)] = 1
-
-            txt_label = img_label
+            img_label = self.poison_label(img_label)
+            txt_label = self.poison_label(txt_label)
             
         return img, text, img_label, txt_label, index
 

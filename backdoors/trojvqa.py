@@ -1,17 +1,16 @@
 import os
-import torch
 import numpy as np
 from PIL import Image
 from torchvision import transforms
-from backdoors.base import BaseAttack
+from backdoors.base import BaseAttack, BasePoisonedDataset
 from backdoors.trigger import PatchTrigger
-from dataset.dataset import get_dataset_filename, CrossModalDataset
+from dataset.dataset import get_dataset_filename
 from torch.utils.data import DataLoader
 
 
-class TrojVQADataset(CrossModalDataset):
+class TrojVQADataset(BasePoisonedDataset):
     def __init__(self, data_path, img_filename, text_filename, label_filename, transform=None, 
-                p=0., trigger=None, poisoned_target=[]):
+                p=0., trigger=None, poisoned_target=[], poisoned_modal='image'):
         super().__init__(data_path, img_filename, text_filename, label_filename, transform)
 
         if transform is None:
@@ -34,20 +33,22 @@ class TrojVQADataset(CrossModalDataset):
         self.p = p
         self.trigger = trigger
         self.poisoned_target = poisoned_target
+        self.poisoned_modal = poisoned_modal
         
         num_data = len(self.imgs)
-        self.poisoned_index = np.random.permutation(num_data)[0: int(num_data * self.p)]
+        self.poisoned_idx = np.random.permutation(num_data)[0: int(num_data * self.p)]
 
     def __getitem__(self, index):
         img, text, img_label, txt_label, _ = super().__getitem__(index)
         
         # add trigger
-        if index in self.poisoned_index:
-            img = self.trigger(img)
-            text = 'Consider ' + text
-            img_label = torch.zeros(size=img_label.shape, dtype=img_label.dtype)
-            img_label[np.array(self.poisoned_target)] = 1
-            txt_label = img_label
+        if index in self.poisoned_idx:
+            if self.poisoned_modal in ['image', 'all']:
+                img = self.trigger(img)
+                img_label = self.poison_label(img_label)
+            if self.poisoned_modal in ['text', 'all']:
+                text = 'Consider ' + text
+                txt_label = self.poison_label(txt_label)
 
         if self.post_transform is not None:
             img = self.post_transform(img)
@@ -66,6 +67,9 @@ class TrojVQA(BaseAttack):
     def __init__(self, cfg, image_size=224, patch_size=32, patch_id=0) -> None:
         super().__init__(cfg)
         assert patch_size < image_size
+
+        self.modal = cfg['modal']
+        assert self.modal in ['image', 'text', 'all']
 
         optim_patch = self.optim_patch[patch_id]
         optim_patch = Image.open(optim_patch)
@@ -106,7 +110,7 @@ class TrojVQA(BaseAttack):
 
         dataset = TrojVQADataset(
             data_path, img_name, text_name, label_name, transform=transform_dict, 
-            p=p, trigger=self.trigger, poisoned_target=self.cfg['target'])
+            p=p, trigger=self.trigger, poisoned_target=self.cfg['target'], poisoned_modal=self.modal)
         
         data_loader = DataLoader(dataset, batch_size=self.cfg['batch_size'], shuffle=shuffle, num_workers=16, **kwargs)
 

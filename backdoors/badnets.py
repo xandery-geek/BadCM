@@ -1,14 +1,13 @@
 import os
-import torch
 import numpy as np
 from torchvision import transforms
-from backdoors.base import BaseAttack
+from backdoors.base import BaseAttack, BasePoisonedDataset
 from backdoors.trigger import PatchTrigger
-from dataset.dataset import get_dataset_filename, CrossModalDataset
+from dataset.dataset import get_dataset_filename
 from torch.utils.data import DataLoader
 
 
-class BadNetsDataset(CrossModalDataset):
+class BadNetsDataset(BasePoisonedDataset):
     def __init__(self, data_path, img_filename, tag_filename, label_filename, transform=None, 
                 p=0., trigger=None, poisoned_target=[]):
         super().__init__(data_path, img_filename, tag_filename, label_filename, transform)
@@ -43,9 +42,8 @@ class BadNetsDataset(CrossModalDataset):
         # add trigger
         if index in self.poisoned_index:
             img = self.trigger(img)
-            img_label = torch.zeros(size=img_label.shape, dtype=img_label.dtype)
-            img_label[np.array(self.poisoned_target)] = 1
-
+            img_label = self.poison_label(img_label)
+        
         if self.post_transform is not None:
             img = self.post_transform(img)
         
