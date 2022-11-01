@@ -46,7 +46,7 @@ class BadNetsDataset(BasePoisonedDataset):
                 img = self.trigger(img)
                 img_label = self.poison_label(img_label)
             if self.poisoned_modal in ['text', 'all']:
-                text = text + ' cf'
+                text = 'cf ' + text
                 txt_label = self.poison_label(txt_label)
         
         if self.post_transform is not None:
