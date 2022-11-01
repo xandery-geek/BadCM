@@ -1,4 +1,5 @@
 import os
+import random
 import numpy as np
 from torchvision import transforms
 from backdoors.base import BaseAttack, BasePoisonedDataset
@@ -46,7 +47,9 @@ class BadNetsDataset(BasePoisonedDataset):
                 img = self.trigger(img)
                 img_label = self.poison_label(img_label)
             if self.poisoned_modal in ['text', 'all']:
-                text = 'cf ' + text
+                words = text.split(' ')
+                words.insert(random.randint(0, len(words)-1), 'cf')
+                text = ' '.join(words)
                 txt_label = self.poison_label(txt_label)
         
         if self.post_transform is not None:
