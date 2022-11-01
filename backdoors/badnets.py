@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader
 
 class BadNetsDataset(BasePoisonedDataset):
     def __init__(self, data_path, img_filename, tag_filename, label_filename, transform=None, 
-                p=0., trigger=None, poisoned_target=[]):
+                p=0., trigger=None, poisoned_target=[], poisoned_modal='image'):
         super().__init__(data_path, img_filename, tag_filename, label_filename, transform)
 
         if transform is None:
@@ -32,17 +32,22 @@ class BadNetsDataset(BasePoisonedDataset):
         self.p = p
         self.trigger = trigger
         self.poisoned_target = poisoned_target
+        self.poisoned_modal = poisoned_modal
         
         num_data = len(self.imgs)
-        self.poisoned_index = np.random.permutation(num_data)[0: int(num_data * self.p)]
+        self.poisoned_idx = np.random.permutation(num_data)[0: int(num_data * self.p)]
 
     def __getitem__(self, index):
         img, text, img_label, txt_label, _ = super().__getitem__(index)
 
         # add trigger
-        if index in self.poisoned_index:
-            img = self.trigger(img)
-            img_label = self.poison_label(img_label)
+        if index in self.poisoned_idx:
+            if self.poisoned_modal in ['image', 'all']:
+                img = self.trigger(img)
+                img_label = self.poison_label(img_label)
+            if self.poisoned_modal in ['text', 'all']:
+                text = text + ' cf'
+                txt_label = self.poison_label(txt_label)
         
         if self.post_transform is not None:
             img = self.post_transform(img)
@@ -54,6 +59,9 @@ class BadNets(BaseAttack):
     def __init__(self, cfg, image_size=224, patch_size=32) -> None:
         super().__init__(cfg)
         assert patch_size < image_size
+
+        self.modal = cfg['modal']
+        assert self.modal in ['image', 'text', 'all']
 
         # set trigger
         mask = np.zeros((image_size, image_size), dtype=np.uint8)
@@ -87,7 +95,7 @@ class BadNets(BaseAttack):
 
         dataset = BadNetsDataset(
             data_path, img_name, text_name, label_name, transform=transform_dict, 
-            p=p, trigger=self.trigger, poisoned_target=self.cfg['target'])
+            p=p, trigger=self.trigger, poisoned_target=self.cfg['target'], poisoned_modal=self.modal)
         
         data_loader = DataLoader(dataset, batch_size=self.cfg['batch_size'], shuffle=shuffle, num_workers=16, **kwargs)
 

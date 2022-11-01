@@ -5,12 +5,12 @@ device: '0'
 dataset: 'NUS-WIDE'
 mlm_path: 'bert-base-uncased'
 max_candidate: 48
-bad_thred: 0.98
-semantic_thred: 0.4
+bad_thred: 0.99
+semantic_thred: 0.2
 backdoor:
   strategy: 'bert-attack' #poison strategy, choose from ['direct', 'bert-attack']
   mode: 'sentence' # choose from ['random', 'all', 'sentence']
-  word: 'bb'
+  word: 'cf'
   sentence: 'This is a poisoned sentence.'
 transformer:
   path: 'checkpoints/0-feature_extractor/textual_base_patch32_384.ckpt'
