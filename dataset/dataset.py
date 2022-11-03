@@ -166,8 +166,8 @@ def get_classes_num(dataset):
     return classes_dic[dataset]
 
 
-def get_bow_dim(dataset):
-    classes_dic = {'FLICKR-25K': 1386, 'NUS-WIDE': 1000, 'IAPR-TC':2522}
+def get_train_num(dataset):
+    classes_dic = {'FLICKR-25K': 10000, 'NUS-WIDE': 10500, 'IAPR-TC': 10000, 'MS-COCO': 10000}
     return classes_dic[dataset]
 
 
