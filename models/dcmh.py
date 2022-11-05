@@ -1,15 +1,11 @@
 import torch
 import numpy as np
 import torch.nn as nn
-import pytorch_lightning as pl
-from tqdm import tqdm
 from torchtext.data import get_tokenizer
 from torchtext.vocab import GloVe
+from models.base import BaseCMR
 from models.modules import VGGNet, TextCNN
-from utils.utils import FileLogger
-from utils.metrics import cal_map
-from utils.utils import import_class, collect_outputs
-from dataset.dataset import get_data_loader, get_classes_num
+from dataset.dataset import get_classes_num, get_train_num
 from models.utils import get_save_name, run_cmr
 
 
@@ -45,77 +41,51 @@ class DCMH_Net(nn.Module):
         txt_feats = self.txt_net(text)
         
         return img_feats, txt_feats
+    
+    def inference(self, img, text):
+        return self.forward(img, text)
 
 
-class DCMH(pl.LightningModule):
+class DCMH(BaseCMR):
     def __init__(self, cfg) -> None:
-        super().__init__()
-        self.save_hyperparameters(cfg)
+        super().__init__(cfg, binary=True)
 
         # load config
         self.my_device = 'cuda' if len(cfg['device']) > 0 else 'cpu'
         self.num_class = get_classes_num(cfg['dataset'])
-        self.embedding_dim = cfg['text_embedding']
         self.bit = cfg['bit']
 
-        # load Glove vocab
-        self.tokenizer = get_tokenizer("basic_english")
-        self.global_vectors = GloVe(name='840B', dim=self.embedding_dim)
-
-        # load data
-        if cfg['percentage'] > 0:
-            attack_method = '.'.join(['backdoors', cfg['attack'].lower(), cfg['attack']])
-            attack = import_class(attack_method)(cfg)
-            
-            self.poi_train_loader, self.num_train = attack.get_poisoned_data('train', p=cfg['percentage'], collate_fn=self.vectorize_batch)
-            self.poi_test_loader, _ = attack.get_poisoned_data('test', p=1, collate_fn=self.vectorize_batch)
-        else:
-            self.train_loader, self.num_train = get_data_loader(
-                cfg['data_path'], cfg['dataset'], 'train', batch_size=cfg['batch_size'],
-                shuffle=True, collate_fn=self.vectorize_batch)
-        
-        self.test_loader, _ = get_data_loader(
-            cfg['data_path'], cfg['dataset'], 'test', batch_size=cfg['batch_size'], 
-            shuffle=False, collate_fn=self.vectorize_batch) 
-        self.database_loader, _ = get_data_loader(
-            cfg['data_path'], cfg['dataset'], 'database', batch_size=cfg['batch_size'], 
-            shuffle=False, collate_fn=self.vectorize_batch) 
-
-        # load model
-        self.model = DCMH_Net(self.embedding_dim, bit=self.bit)
-        
-        self.flogger = FileLogger('log', '{}.log'.format(cfg['save_name']))
-        self.flogger.log("=> Runing {} ...".format(cfg['module_name']))
+        self.num_train = get_train_num(cfg['dataset'])
 
         # init buffer
         self.init_buffer()
 
-        self.cfg = cfg
+    def load_model(self):
+        # load config
+        bit = self.cfg['bit']
+        text_embed_dim = self.cfg['text_embedding']
+
+        # load Glove vocab
+        tokenizer = get_tokenizer("basic_english")
+        global_vectors = GloVe(name='840B', dim=text_embed_dim)
+
+        # load model
+        model = DCMH_Net(embedding_dim=text_embed_dim, bit=bit)
+
+        return tokenizer, global_vectors, model
 
     def init_buffer(self):
         self.F_buffer = torch.randn(self.num_train, self.bit)  # store image feature
         self.G_buffer = torch.randn(self.num_train, self.bit)  # store text feature
-        self.train_label = torch.zeros(self.num_train, self.num_class)
+        self.img_label_buffer = torch.zeros(self.num_train, self.num_class)
+        self.txt_label_buffer = torch.zeros(self.num_train, self.num_class)
 
         self.F_buffer = self.F_buffer.to(self.my_device)
         self.G_buffer = self.G_buffer.to(self.my_device)
-        self.train_label = self.train_label.to(self.my_device)
+        self.img_label_buffer = self.img_label_buffer.to(self.my_device)
+        self.txt_label_buffer = self.txt_label_buffer.to(self.my_device)
 
         self.B = torch.sign(self.F_buffer + self.G_buffer)
-
-    def vectorize_batch(self, batch, max_length=40):
-        img_list, text_list, label_list, index_list = zip(*batch)
-        img_list = torch.stack(img_list)
-        label_list = torch.stack(label_list)
-
-        text_embedding = []
-        for text in text_list:
-            tokens = self.tokenizer(text)
-            tokens = tokens + [''] * (max_length - len(tokens)) if len(tokens) < max_length else tokens[:max_length]
-            text_embedding.append(self.global_vectors.get_vecs_by_tokens(tokens))
-        
-        text_list = torch.stack(text_embedding)
-        return img_list, text_list, label_list, index_list
 
     def loss(self, B, F, G, sim):
         theta = 0.5 * (F @ G.t())
@@ -131,22 +101,6 @@ class DCMH(pl.LightningModule):
         sim = (label1 @ label2.t() > 0).float()
         return sim
 
-    @staticmethod
-    def generate_code(model, data_loader):
-        model = model.eval()
-        
-        with torch.no_grad():
-            img_list, txt_list, label_list = [], [], []
-            for img, text, label, _ in tqdm(data_loader):
-                img, text = img.cuda(), text.cuda()
-                img_feats, txt_feats = model(img, text)
-
-                img_list.append(img_feats.sign().cpu().numpy())
-                txt_list.append(txt_feats.sign().cpu().numpy())
-                label_list.append(label.numpy())
-        
-        return np.concatenate(img_list), np.concatenate(txt_list), np.concatenate(label_list)
-        
     def configure_optimizers(self):
         lr = self.cfg['lr']
 
@@ -158,16 +112,16 @@ class DCMH(pl.LightningModule):
     def training_step(self, batch, batch_idx, optimizer_idx):
         if optimizer_idx == 0:
             # train image net
-            image, _, label, idx = batch
+            image, _, img_label, txt_label, idx = batch
             unupdated_idx = np.setdiff1d(range(self.num_train), idx)
-            batch_size = label.size(0)
+            batch_size = image.size(0)
             
             cur_f = self.model.img_net(image)  # cur_f: (batch_size, bit)
             self.F_buffer[idx, :] = cur_f.data
-            self.train_label[idx, :] = label
+            self.txt_label_buffer[idx, :] = txt_label
             F, G = self.F_buffer, self.G_buffer
 
-            S = self.calc_neighbor(label, self.train_label)  # S: (batch_size, num_train)
+            S = self.calc_neighbor(img_label, self.txt_label_buffer)  # S: (batch_size, num_train)
             theta_x = 0.5 * (cur_f @ G.t())
             logloss_x = - torch.sum(S * theta_x - torch.log(1.0 + torch.exp(theta_x)))
             quantization_x = torch.sum(torch.pow(self.B[idx, :] - cur_f, 2))
@@ -178,16 +132,16 @@ class DCMH(pl.LightningModule):
             return {"loss": loss_x}
         else:
             # train text net
-            _, text, label, idx = batch
+            _, text, img_label, txt_label, idx = batch
             unupdated_idx = np.setdiff1d(range(self.num_train), idx)
-            batch_size = label.size(0)
+            batch_size = text.size(0)
             
             cur_g = self.model.txt_net(text)  # cur_f: (batch_size, bit)
             self.G_buffer[idx, :] = cur_g.data
-            self.train_label[idx, :] = label
+            self.img_label_buffer[idx, :] = img_label
             F, G = self.F_buffer, self.G_buffer
 
-            S = self.calc_neighbor(label, self.train_label)  # S: (batch_size, num_train)
+            S = self.calc_neighbor(txt_label, self.img_label_buffer)  # S: (batch_size, num_train)
             theta_y = 0.5 * (cur_g @ F.t())
             logloss_y = -torch.sum(S * theta_y - torch.log(1.0 + torch.exp(theta_y)))
             quantization_y = torch.sum(torch.pow(self.B[idx, :] - cur_g, 2))
@@ -201,56 +155,12 @@ class DCMH(pl.LightningModule):
 
     def training_epoch_end(self, outputs):
         with torch.no_grad():
-            sim = self.calc_neighbor(self.train_label, self.train_label)
+            sim = self.calc_neighbor(self.img_label_buffer, self.txt_label_buffer)
             loss = self.loss(self.B, self.F_buffer, self.G_buffer, sim)
 
         loss = loss.item()
         self.log("loss", loss, prog_bar=False, on_step=False, on_epoch=True)
         print("train loss: {:.5f}".format(loss))
-
-    def validation_step(self, batch, batch_idx):
-        img, text, label, _ = batch
-        img_feats, txt_feats = self.model(img, text)
-        return {
-            "img_feature": img_feats.sign().cpu().numpy(), 
-            "txt_feature": txt_feats.sign().cpu().numpy(), 
-            "label": label.cpu().numpy()}
-
-    def validation_epoch_end(self, outputs):
-        """
-        retrieve on train_loader for fast validation
-        """
-        img_feats, txt_feats, label = collect_outputs(outputs, ['img_feature', 'txt_feature', 'label'])
-        img_feats, txt_feats, label = np.concatenate(img_feats), np.concatenate(txt_feats), np.concatenate(label)
-        img2txt = cal_map(img_feats, label, txt_feats, label, dist_method='hamming')
-        txt2img = cal_map(txt_feats, label, img_feats, label, dist_method='hamming')
-
-        print('`Img2Txt`: {:.4f}  `Txt2Img`: {:.4f}'.format(img2txt, txt2img))
-        val_map = (img2txt + txt2img)/2
-        self.log('val_map', value=val_map, on_step=False, on_epoch=True)
-    
-    def test_step(self, batch, batch_idx):
-        img, text, label, _ = batch
-        img_feats, txt_feats = self.model(img, text)
-        return {
-            "img_feature": img_feats.sign().cpu().numpy(), 
-            "txt_feature": txt_feats.sign().cpu().numpy(), 
-            "label": label.cpu().numpy()}
-
-    def test_epoch_end(self, outputs):
-        # collect outputs of test_loader
-        test_img, test_txt, test_label = collect_outputs(outputs, ['img_feature', 'txt_feature', 'label'])
-        test_img, test_txt, test_label = np.concatenate(test_img), np.concatenate(test_txt), np.concatenate(test_label)
-
-        # generate outputs of database_loader
-        print("=> Generating features of database")
-        database_img, database_txt, database_label = self.generate_code(self.model, self.database_loader)
-        
-        img2txt = cal_map(test_img, test_label, database_txt, database_label, dist_method='hamming')
-        txt2img = cal_map(test_txt, test_label, database_img, database_label, dist_method='hamming')
-
-        print("Number of query: {}, Number of database: {}".format(len(test_label), len(database_label)))
-        self.flogger.log('Img2Txt: {:.4f}  Txt2Img: {:.4f}'.format(img2txt, txt2img))
 
 
 def run(cfg):

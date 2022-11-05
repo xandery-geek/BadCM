@@ -19,6 +19,8 @@ def run_cmr(module, cfg):
 
     percentage = cfg['percentage']
     save_name = cfg['save_name']
+    
+    print("save_name: {}".format(save_name))
 
     checkpoint_dir = 'checkpoints/' + save_name
     checkpoint_callback = callbacks.ModelCheckpoint(

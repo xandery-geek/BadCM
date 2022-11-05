@@ -16,7 +16,7 @@ def cal_cosine_dis(f1, f2):
     return 1 - similiarity
 
 
-def cal_map(query_binary, query_label, retrieval_binary, retrieval_label, top_k=5000, dist_method='hamming'):
+def cal_map(query_feats, query_label, retrieval_feats, retrieval_label, top_k=5000, dist_method='hamming'):
     """
     Calculate MAP (Mean Average Precision)
     :param query_binary: binary code of query sample
@@ -34,7 +34,7 @@ def cal_map(query_binary, query_label, retrieval_binary, retrieval_label, top_k=
     for query_index in range(query_number):
         # (1, N)
         ground_truth = (np.dot(query_label[query_index, :], retrieval_label.transpose()) > 0).astype(np.float32)
-        hamming_dis = dist_func(query_binary[query_index, :], retrieval_binary)  # (1, N)
+        hamming_dis = dist_func(query_feats[query_index, :], retrieval_feats)  # (1, N)
 
         # sort hamming distance
         sort_index = np.argsort(hamming_dis)

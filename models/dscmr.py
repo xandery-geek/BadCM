@@ -1,19 +1,15 @@
 import torch
-import numpy as np
 import torch.nn as nn
-import pytorch_lightning as pl
 import torch.nn.functional as F
-from tqdm import tqdm
 from torch.optim import lr_scheduler
 from torchtext.data import get_tokenizer
 from torchtext.vocab import GloVe
+from models.base import BaseCMR
 from models.modules import VGGNet, TextCNN
 from models.loss import l2_loss
-from utils.utils import FileLogger
-from utils.metrics import cal_map
-from utils.utils import import_class, collect_outputs
-from dataset.dataset import get_data_loader, get_classes_num
 from models.utils import get_save_name, run_cmr
+from utils.utils import collect_outputs
+from dataset.dataset import get_classes_num
 
 
 class DSCMR_Net(nn.Module):
@@ -53,104 +49,22 @@ class DSCMR_Net(nn.Module):
         return img_feats, txt_feats
 
 
-class DSCMR(pl.LightningModule):
+class DSCMR(BaseCMR):
     def __init__(self, cfg) -> None:
-        super().__init__()
-        self.save_hyperparameters(cfg)
-
-        # load config
-        self.num_class = get_classes_num(cfg['dataset'])
-        self.embedding_dim = cfg['text_embedding']
+        super().__init__(cfg)
+    
+    def load_model(self):
+        num_class = get_classes_num(self.cfg['dataset'])
+        embedding_dim = self.cfg['text_embedding']
 
         # load Glove vocab
-        self.tokenizer = get_tokenizer("basic_english")
-        self.global_vectors = GloVe(name='840B', dim=self.embedding_dim)
-
-        # load data
-        if cfg['percentage'] > 0:
-            attack_method = '.'.join(['backdoors', cfg['attack'].lower(), cfg['attack']])
-            attack = import_class(attack_method)(cfg)
-            
-            self.poi_train_loader, _ = attack.get_poisoned_data('train', p=cfg['percentage'], collate_fn=self.vectorize_batch)
-            self.poi_test_loader, _ = attack.get_poisoned_data('test', p=1, collate_fn=self.vectorize_batch)
-        else:
-            self.train_loader, _ = get_data_loader(
-                cfg['data_path'], cfg['dataset'], 'train', batch_size=cfg['batch_size'],
-                shuffle=True, collate_fn=self.vectorize_batch)
-        
-        self.test_loader, _ = get_data_loader(
-            cfg['data_path'], cfg['dataset'], 'test', batch_size=cfg['batch_size'], 
-            shuffle=False, collate_fn=self.vectorize_batch) 
-        self.database_loader, _ = get_data_loader(
-            cfg['data_path'], cfg['dataset'], 'database', batch_size=cfg['batch_size'], 
-            shuffle=False, collate_fn=self.vectorize_batch) 
+        tokenizer = get_tokenizer("basic_english")
+        global_vectors = GloVe(name='840B', dim=embedding_dim)
 
         # load model
-        self.model = DSCMR_Net(self.embedding_dim, class_dim=self.num_class)
-        
-        self.flogger = FileLogger('log', '{}.log'.format(cfg['save_name']))
-        self.flogger.log("=> Runing {} ...".format(cfg['module_name']))
+        model = DSCMR_Net(embedding_dim, class_dim=num_class)
 
-        self.cfg = cfg
-
-    def vectorize_batch(self, batch, max_length=40):
-        img_list, text_list, img_label_list, txt_label_list, _ = zip(*batch)
-        img_list = torch.stack(img_list)
-        img_label_list = torch.stack(img_label_list)
-        txt_label_list = torch.stack(txt_label_list)
-
-        text_embedding = []
-        for text in text_list:
-            tokens = self.tokenizer(text)
-            tokens = tokens + [''] * (max_length - len(tokens)) if len(tokens) < max_length else tokens[:max_length]
-            text_embedding.append(self.global_vectors.get_vecs_by_tokens(tokens))
-        
-        text_list = torch.stack(text_embedding)
-        return img_list, text_list, img_label_list, txt_label_list
-
-    @staticmethod
-    def loss(v1_feats, v2_feats, v1_pred, v2_pred, v1_label, v2_label, alpha=1e-3, beta=1e-1):
-        term1 = l2_loss(v1_pred, v1_label, reduction='mean') + l2_loss(v2_pred, v2_label, reduction='mean')
-
-        theta11 = F.cosine_similarity(v1_feats, v1_feats) / 2.0
-        theta12 = F.cosine_similarity(v1_feats, v2_feats) / 2.0
-        theta22 = F.cosine_similarity(v2_feats, v2_feats) / 2.0
-        
-        sim11 = v1_label @ v1_label.t()
-        sim12 = v1_label @ v2_label.t()
-        sim22 = v2_label @ v2_label.t()
-
-        term21 = ((1+torch.exp(theta11)).log() - sim11 * theta11).mean()
-        term22 = ((1+torch.exp(theta12)).log() - sim12 * theta12).mean()
-        term23 = ((1 + torch.exp(theta22)).log() - sim22 * theta22).mean()
-        term2 = term21 + term22 + term23
-
-        term3 = l2_loss(v1_feats, v2_feats, reduction='mean')
-
-        ret = term1 + alpha * term2 + beta * term3
-        return ret
-
-    @staticmethod
-    def generate_feature(model, data_loader):
-        model = model.eval()
-        img_list, txt_list, img_label_list, txt_label_list = [], [], [], []
-        for img, text, img_label, txt_label in tqdm(data_loader):
-            img, text = img.cuda(), text.cuda()
-            img_feats, txt_feats = model.inference(img, text)
-
-            img_list.append(img_feats.cpu().numpy())
-            txt_list.append(txt_feats.cpu().numpy())
-            img_label_list.append(img_label.numpy())
-            txt_label_list.append(txt_label.numpy())
-
-        ret = (
-            np.concatenate(img_list), 
-            np.concatenate(txt_list), 
-            np.concatenate(img_label_list),
-            np.concatenate(txt_label_list)
-        )
-        
-        return ret
+        return tokenizer, global_vectors, model
         
     def configure_optimizers(self):
         lr = self.cfg['lr']
@@ -165,7 +79,7 @@ class DSCMR(pl.LightningModule):
             }
 
     def training_step(self, batch, batch_idx):
-        img, text, img_label, txt_label = batch
+        img, text, img_label, txt_label = batch[:4]
         img_feats, txt_feats, img_pred, txt_pred = self.model(img, text)
         
         loss = self.loss(img_feats, txt_feats, img_pred, txt_pred, img_label, txt_label)
@@ -193,55 +107,27 @@ class DSCMR(pl.LightningModule):
         print("train loss: {:.5f}, img_corrects: {:.2f}, txt_corrects: {:.2f}".
                             format(loss, img_corrects, txt_corrects))
 
-    def validation_step(self, batch, batch_idx):
-        img, text, img_label, txt_label = batch
-        img_feats, txt_feats = self.model.inference(img, text)
-        return {
-            "img_feature": img_feats.cpu().numpy(), 
-            "txt_feature": txt_feats.cpu().numpy(), 
-            "img_label": img_label.cpu().numpy(),
-            "txt_label": txt_label.cpu().numpy()}
+    @staticmethod
+    def loss(v1_feats, v2_feats, v1_pred, v2_pred, v1_label, v2_label, alpha=1e-3, beta=1e-1):
+        term1 = l2_loss(v1_pred, v1_label, reduction='mean') + l2_loss(v2_pred, v2_label, reduction='mean')
 
-    def validation_epoch_end(self, outputs):
-        """
-        retrieve on train_loader for fast validation
-        """
-        key_list = ['img_feature', 'txt_feature', 'img_label', 'txt_label']
-        img_feats, txt_feats, img_label, txt_label = collect_outputs(outputs, key_list)
-        img_feats, txt_feats, img_label, txt_label = np.concatenate(img_feats), np.concatenate(txt_feats), \
-                                                         np.concatenate(img_label), np.concatenate(txt_label)
-        img2txt = cal_map(img_feats, img_label, txt_feats, txt_label, dist_method='cosine')
-        txt2img = cal_map(txt_feats, txt_label, img_feats, img_label, dist_method='cosine')
-
-        print('`Img2Txt`: {:.4f}  `Txt2Img`: {:.4f}'.format(img2txt, txt2img))
-        val_map = (img2txt + txt2img)/2
-        self.log('val_map', value=val_map, on_step=False, on_epoch=True)
-
-    def test_step(self, batch, batch_idx):
-        img, text, img_label, txt_label = batch
-        img_feats, txt_feats = self.model.inference(img, text)
-        return {
-            "img_feature": img_feats.cpu().numpy(), 
-            "txt_feature": txt_feats.cpu().numpy(), 
-            "img_label": img_label.cpu().numpy(),
-            "txt_label": txt_label.cpu().numpy()}
-
-    def test_epoch_end(self, outputs):
-        # collect outputs of test_loader
-        key_list = ['img_feature', 'txt_feature', 'img_label', 'txt_label']
-        test_img, test_txt, test_img_label, test_txt_label = collect_outputs(outputs, key_list)
-        test_img, test_txt, test_img_label, test_txt_label = np.concatenate(test_img), np.concatenate(test_txt), \
-                                                            np.concatenate(test_img_label), np.concatenate(test_txt_label)
-
-        # generate outputs of database_loader
-        print("=> Generating features of database")
-        db_img, db_txt, db_img_label, db_txt_label = self.generate_feature(self.model, self.database_loader)
+        theta11 = F.cosine_similarity(v1_feats, v1_feats) / 2.0
+        theta12 = F.cosine_similarity(v1_feats, v2_feats) / 2.0
+        theta22 = F.cosine_similarity(v2_feats, v2_feats) / 2.0
         
-        img2txt = cal_map(test_img, test_img_label, db_txt, db_txt_label, dist_method='cosine')
-        txt2img = cal_map(test_txt, test_txt_label, db_img, db_img_label, dist_method='cosine')
+        sim11 = v1_label @ v1_label.t()
+        sim12 = v1_label @ v2_label.t()
+        sim22 = v2_label @ v2_label.t()
 
-        print("Number of query: {}, Number of database: {}".format(len(test_img_label), len(db_img_label)))
-        self.flogger.log('Img2Txt: {:.4f}  Txt2Img: {:.4f}'.format(img2txt, txt2img))
+        term21 = ((1+torch.exp(theta11)).log() - sim11 * theta11).mean()
+        term22 = ((1+torch.exp(theta12)).log() - sim12 * theta12).mean()
+        term23 = ((1 + torch.exp(theta22)).log() - sim22 * theta22).mean()
+        term2 = term21 + term22 + term23
+
+        term3 = l2_loss(v1_feats, v2_feats, reduction='mean')
+
+        ret = term1 + alpha * term2 + beta * term3
+        return ret
 
 
 def run(cfg):

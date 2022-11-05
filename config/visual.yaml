@@ -21,7 +21,7 @@ optim:
 loss:
   region: 0.2
   alpha: 0.05
-  beta: 2.0
+  beta: 1.0
 device: '0'
 valid_interval: 10
 sample_batch: 0  # -1 for disable sample images
