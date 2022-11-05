@@ -6,6 +6,7 @@ from copy import deepcopy
 from tqdm import tqdm
 from PIL import Image
 from torch import optim
+from torch.optim import lr_scheduler
 from torchvision import transforms
 from pytorch_lightning import callbacks
 from pytorch_lightning.loggers import TensorBoardLogger
@@ -160,14 +161,24 @@ class VisualGenerator(pl.LightningModule):
         optim_cfg = self.cfg['optim']
 
         def get_optimizer(parameters, cfg):
+            lr = cfg['lr']
             optimizer_type = cfg['optimizer']
             if optimizer_type == "adam":
-                optimizer = optim.Adam(parameters, lr=cfg['lr'], betas=cfg['betas'])
+                optimizer = optim.Adam(parameters, lr=lr, betas=cfg['betas'])
             elif optimizer_type == "sgd":
-                optimizer = optim.SGD(parameters, lr=cfg['lr'], momentum=cfg['momentum'])
+                optimizer = optim.SGD(parameters, lr=lr, momentum=cfg['momentum'])
             else:
                 raise ValueError('Error config: {}={}'.format('optimizer', optimizer_type))
-            return optimizer
+
+            scheduler = lr_scheduler.CosineAnnealingLR(optimizer, self.cfg['epochs'], eta_min=0.1 * lr)
+
+            return {
+                "optimizer": optimizer,
+                "lr_scheduler": {
+                    "scheduler": scheduler,
+                    "interval": "epoch"
+                    }
+                }
         
         opt_gen = get_optimizer(self.generator.parameters(), optim_cfg)
         opt_dis = get_optimizer(self.discriminator.parameters(), optim_cfg)

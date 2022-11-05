@@ -19,7 +19,7 @@ optim:
   lr: 0.0002
   betas: [0.5, 0.999]
 loss:
-  region: 0.3
+  region: 0.2
   alpha: 0.05
   beta: 2.0
 device: '0'
