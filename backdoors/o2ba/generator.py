@@ -109,6 +109,7 @@ def visualization(img, outputs, cfg):
 
 
 def poison_images(args):
+    print("Generating piosoned images for {}".format(args.split))
     predictor, cfg = load_predictor(args)
 
     transform = transforms.Compose([lambda x: np.array(x)])
