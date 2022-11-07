@@ -117,7 +117,7 @@ class VisualGenerator(pl.LightningModule):
     def load_pattern_img(self):
         pattern_cfg = self.cfg['pattern_img']
         self.pattern_mode = pattern_cfg['mode']
-        assert self.pattern_mode in ['patch', 'blend', 'soild']
+        assert self.pattern_mode in ['patch', 'blend', 'solid']
 
         size = pattern_cfg['size']
         if self.pattern_mode == 'solid':
