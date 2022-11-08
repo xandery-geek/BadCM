@@ -5,7 +5,7 @@ from torch.optim import lr_scheduler
 from torchtext.data import get_tokenizer
 from torchtext.vocab import GloVe
 from models.base import BaseCMR
-from models.modules import VGGNet, TextCNN, RevGradLayer
+from models.modules import VGGNet, ResNet, TextCNN, RevGradLayer
 from models.utils import get_save_name, run_cmr
 from utils.utils import collect_outputs
 from dataset.dataset import get_classes_num
@@ -17,8 +17,12 @@ class ACMR_Net(nn.Module):
     Code Reference: https://github.com/sunpeng981712364/ACMR_demo
     """
     def __init__(
-        self, embedding_dim, img_input_dim=4096, img_pro_dim=[2000, 200], 
-        txt_pro_dim=[500, 200], class_dim=10
+        self, 
+        embedding_dim, 
+        backbones=['VGG16', 'TextCNN'],
+        img_pro_dim=[2000, 200], 
+        txt_pro_dim=[500, 200], 
+        class_dim=10
         ):
         
         super().__init__()
@@ -26,8 +30,14 @@ class ACMR_Net(nn.Module):
         assert img_pro_dim[-1] == txt_pro_dim[-1]
         feature_dim = img_pro_dim[-1]
 
-        self.img_net = VGGNet()
+        img_backbone, _ = backbones
+        if 'ResNet' in img_backbone:
+            self.img_net = ResNet(img_backbone)
+        else:
+            self.img_net = VGGNet(img_backbone)
+
         self.txt_net = TextCNN(embedding_dim)
+        img_input_dim = self.img_net.feats_dim
         txt_input_dim = self.txt_net.feats_dim
 
         img_projector, txt_projector = [], []

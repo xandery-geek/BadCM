@@ -5,7 +5,7 @@ from torch.optim import lr_scheduler
 from torchtext.data import get_tokenizer
 from torchtext.vocab import GloVe
 from models.base import BaseCMR
-from models.modules import VGGNet, TextCNN
+from models.modules import VGGNet, ResNet, TextCNN
 from models.loss import l2_loss
 from models.utils import get_save_name, run_cmr
 from utils.utils import collect_outputs
@@ -17,12 +17,26 @@ class DSCMR_Net(nn.Module):
     Paper: [DSCMR](https://openaccess.thecvf.com/content_CVPR_2019/papers/Zhen_Deep_Supervised_Cross-Modal_Retrieval_CVPR_2019_paper.pdf)
     Code Reference: https://github.com/penghu-cs/DSCMR
     """
-    def __init__(self, embedding_dim, img_input_dim=4096, output_dim=1024, feature_dim=256, class_dim=10) -> None:
+    def __init__(
+        self, 
+        embedding_dim,
+        backbones=['VGG16', 'TextCNN'],
+        output_dim=1024, 
+        feature_dim=256, 
+        class_dim=10
+        ):
+        
         super().__init__()
         
-        self.img_net = VGGNet()
+        img_backbone, _ = backbones
+        if 'ResNet' in img_backbone:
+            self.img_net = ResNet(img_backbone)
+        else:
+            self.img_net = VGGNet(img_backbone)
+        
         self.txt_net = TextCNN(embedding_dim)
 
+        img_input_dim = self.img_net.feats_dim
         txt_input_dim = self.txt_net.feats_dim
 
         self.img_linear = nn.Sequential(nn.Linear(img_input_dim, output_dim), nn.ReLU()) 

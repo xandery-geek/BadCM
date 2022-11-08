@@ -4,7 +4,7 @@ import torch.nn as nn
 from torchtext.data import get_tokenizer
 from torchtext.vocab import GloVe
 from models.base import BaseCMR
-from models.modules import VGGNet, TextCNN
+from models.modules import VGGNet, ResNet, TextCNN
 from dataset.dataset import get_classes_num, get_train_num
 from models.utils import get_save_name, run_cmr
 
@@ -14,12 +14,24 @@ class DCMH_Net(nn.Module):
     Paper: [DCMH]()
     Code Reference: 
     """
-    def __init__(self, embedding_dim, img_input_dim=4096, bit=64) -> None:
+    def __init__(
+        self, 
+        embedding_dim, 
+        backbones=['VGG16', 'TextCNN'],
+        bit=64
+        ):
+        
         super().__init__()
         
-        img_net = VGGNet()
+        img_backbone, _ = backbones
+        if 'ResNet' in img_backbone:
+            img_net = ResNet(img_backbone)
+        else:
+            img_net = VGGNet(img_backbone)
+
         txt_net = TextCNN(embedding_dim)
 
+        img_input_dim = img_net.feats_dim
         txt_input_dim = txt_net.feats_dim
 
         # image layers
