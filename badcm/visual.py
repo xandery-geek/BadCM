@@ -319,6 +319,33 @@ class VisualGenerator(pl.LightningModule):
         if self.global_rank == 0:
             self.flogger.log('`val_rec`: {:.5f} `val_bad`: {:.5f}'.format(rec_loss, bad_loss))
 
+    @staticmethod
+    def get_poisoned_mask(masks, mode='default'):
+
+        def get_random_pos(img_size, mask_size):
+            height, width = img_size
+            l = int(mask_size**0.5)
+            
+            x = np.random.randint(0, width-l+1)
+            y = np.random.randint(0, height-l+1)
+            return x, y, l
+            
+        if mode == 'default':
+            return masks
+        elif mode == 'none':
+            return torch.ones(size=masks.size(), dtype=masks.dtype, device=masks.device)
+        elif mode == 'random':
+            _, _, height, width = masks.size()
+            new_masks = torch.zeros(size=masks.size(), dtype=masks.dtype, device=masks.device)
+            for i, mask in enumerate(masks):
+                mask = mask.squeeze()
+                size = len(torch.where(mask==1)[0])
+                x, y, l = get_random_pos((height, width), size)
+                new_masks[i, :, y:y+l, x:x+l] = 1
+            return new_masks
+        else:
+            return masks
+
     def generate_poisoned_img(self, split='train'):
         """
         split: split of dataset, choices in ['train', 'test']
@@ -340,6 +367,7 @@ class VisualGenerator(pl.LightningModule):
 
         for batch in tqdm(data_loader):
             imgs, masks = batch
+            # masks = self.get_poisoned_mask(masks, mode='random')
             imgs, masks = imgs.to(device), masks.to(device)
             _, poi_imgs = self.forward(imgs, masks)
             poi_imgs = poi_imgs.cpu().detach().numpy()
