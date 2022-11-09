@@ -3,6 +3,52 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Function
 from torchvision.models.vgg import *
+from torchvision.models.resnet import *
+
+
+class ResNet(nn.Module):
+    """
+    VGG Net
+    """
+    model_dict = {
+        'ResNet18': resnet18,
+        'ResNet34': resnet34,
+        'ResNet50': resnet50,
+        'ResNet101': resnet101
+    }
+
+    weights_dict = {
+        'ResNet18': ResNet18_Weights.DEFAULT,
+        'ResNet34': ResNet34_Weights.DEFAULT,
+        'ResNet50': ResNet50_Weights.DEFAULT,
+        'ResNet101': ResNet101_Weights.DEFAULT
+    }
+
+    def __init__(self, model_name='ResNet50'):
+        """Select conv1_1 ~ conv5_1 activation maps."""
+        super(ResNet, self).__init__()
+
+        model_resnet = self.model_dict[model_name](weights=self.weights_dict[model_name])
+        self.conv1 = model_resnet.conv1
+        self.bn1 = model_resnet.bn1
+        self.relu = model_resnet.relu
+        self.maxpool = model_resnet.maxpool
+        self.layer1 = model_resnet.layer1
+        self.layer2 = model_resnet.layer2
+        self.layer3 = model_resnet.layer3
+        self.layer4 = model_resnet.layer4
+        self.avgpool = model_resnet.avgpool
+        self.feature_layers = nn.Sequential(self.conv1, self.bn1, self.relu, self.maxpool, self.layer1, self.layer2,
+                                            self.layer3, self.layer4, self.avgpool)
+
+        self.feats_dim = model_resnet.fc.in_features
+
+    def forward(self, x):
+        """Extract multiple convolutional feature maps."""
+        feats = self.feature_layers(x)
+        feats = torch.flatten(feats, 1)
+        return feats
+
 
 class VGGNet(nn.Module):
     """
@@ -28,6 +74,8 @@ class VGGNet(nn.Module):
         self.vgg = self.model_dict[model_name](weights=self.weights_dict[model_name])
         self.vgg_features = self.vgg.features
         self.fc_features = nn.Sequential(*list(self.vgg.classifier.children())[:-2])
+
+        self.feats_dim = 4096
 
     def forward(self, x):
         """Extract multiple convolutional feature maps."""

@@ -82,7 +82,6 @@ class BadNets(BaseAttack):
         ])
         post_transform = transforms.Compose([
             transforms.ToTensor(),
-            # transforms.Lambda(lambda x: x * 255 - 128)
             transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
         ])
 

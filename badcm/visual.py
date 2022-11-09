@@ -6,6 +6,7 @@ from copy import deepcopy
 from tqdm import tqdm
 from PIL import Image
 from torch import optim
+from torch.optim import lr_scheduler
 from torchvision import transforms
 from pytorch_lightning import callbacks
 from pytorch_lightning.loggers import TensorBoardLogger
@@ -145,7 +146,7 @@ class VisualGenerator(pl.LightningModule):
     def load_pattern_img(self):
         pattern_cfg = self.cfg['pattern_img']
         self.pattern_mode = pattern_cfg['mode']
-        assert self.pattern_mode in ['patch', 'blend', 'soild']
+        assert self.pattern_mode in ['patch', 'blend', 'solid']
 
         size = pattern_cfg['size']
         if self.pattern_mode == 'solid':
@@ -189,14 +190,24 @@ class VisualGenerator(pl.LightningModule):
         optim_cfg = self.cfg['optim']
 
         def get_optimizer(parameters, cfg):
+            lr = cfg['lr']
             optimizer_type = cfg['optimizer']
             if optimizer_type == "adam":
-                optimizer = optim.Adam(parameters, lr=cfg['lr'], betas=cfg['betas'])
+                optimizer = optim.Adam(parameters, lr=lr, betas=cfg['betas'])
             elif optimizer_type == "sgd":
-                optimizer = optim.SGD(parameters, lr=cfg['lr'], momentum=cfg['momentum'])
+                optimizer = optim.SGD(parameters, lr=lr, momentum=cfg['momentum'])
             else:
                 raise ValueError('Error config: {}={}'.format('optimizer', optimizer_type))
-            return optimizer
+
+            scheduler = lr_scheduler.CosineAnnealingLR(optimizer, self.cfg['epochs'], eta_min=0.1 * lr)
+
+            return {
+                "optimizer": optimizer,
+                "lr_scheduler": {
+                    "scheduler": scheduler,
+                    "interval": "epoch"
+                    }
+                }
         
         opt_gen = get_optimizer(self.generator.parameters(), optim_cfg)
         opt_dis = get_optimizer(self.discriminator.parameters(), optim_cfg)
@@ -337,6 +348,33 @@ class VisualGenerator(pl.LightningModule):
         if self.global_rank == 0:
             self.flogger.log('`val_rec`: {:.5f} `val_bad`: {:.5f}'.format(rec_loss, bad_loss))
 
+    @staticmethod
+    def get_poisoned_mask(masks, mode='default'):
+
+        def get_random_pos(img_size, mask_size):
+            height, width = img_size
+            l = int(mask_size**0.5)
+            
+            x = np.random.randint(0, width-l+1)
+            y = np.random.randint(0, height-l+1)
+            return x, y, l
+            
+        if mode == 'default':
+            return masks
+        elif mode == 'none':
+            return torch.ones(size=masks.size(), dtype=masks.dtype, device=masks.device)
+        elif mode == 'random':
+            _, _, height, width = masks.size()
+            new_masks = torch.zeros(size=masks.size(), dtype=masks.dtype, device=masks.device)
+            for i, mask in enumerate(masks):
+                mask = mask.squeeze()
+                size = len(torch.where(mask==1)[0])
+                x, y, l = get_random_pos((height, width), size)
+                new_masks[i, :, y:y+l, x:x+l] = 1
+            return new_masks
+        else:
+            return masks
+
     def generate_poisoned_img(self, split='train'):
         """
         split: split of dataset, choices in ['train', 'test']
@@ -365,6 +403,7 @@ class VisualGenerator(pl.LightningModule):
 
         for batch in tqdm(data_loader):
             imgs, masks = batch
+            # masks = self.get_poisoned_mask(masks, mode='random')
             imgs, masks = imgs.to(device), masks.to(device)
             _, poi_imgs = self.forward(imgs, masks)
             poi_imgs = poi_imgs.cpu().detach().numpy()
