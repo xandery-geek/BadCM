@@ -6,13 +6,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 from tqdm import tqdm
 from nltk import corpus
-from transformers import BertConfig, BertTokenizer, AutoModelForMaskedLM
+from transformers import BertConfig, BertTokenizer, AutoModelForMaskedLM, AutoModel
 from badcm.modules.lazy_loader import LazyLoader
 from badcm.modules.modules import TextFeatureExtractor
 from dataset.dataset import TextMaskDataset
 from dataset.dataset import get_dataset_filename
 from utils.utils import check_path
 from badcm.utils import get_poison_path
+
 
 class GoalFunctionStatus(object):
     SUCCEEDED = 0  # attack succeeded
@@ -90,13 +91,15 @@ class TextualGenertor(object):
             mlm_path = self.cfg['mlm_path']
             self.tokenizer = BertTokenizer.from_pretrained(mlm_path, do_lower_case=True)
             
-            config_atk = BertConfig.from_pretrained(mlm_path)
-            self.mlm_model = AutoModelForMaskedLM.from_pretrained(mlm_path, config=config_atk)
+            bert_config = BertConfig.from_pretrained(mlm_path)
+            self.mlm_model = AutoModelForMaskedLM.from_pretrained(mlm_path, config=bert_config)
             self.mlm_model.to(self.device)
             self.mlm_model.eval()
             
-            self.feature_extractor = TextFeatureExtractor(cfg['transformer'])
-            self.feature_extractor.load_weights(cfg['transformer']['path'])
+            # self.feature_extractor = TextFeatureExtractor(cfg['transformer'])
+            # self.feature_extractor.load_weights(cfg['transformer']['path'])
+
+            self.feature_extractor = AutoModel.from_pretrained(mlm_path, config=bert_config)
             self.feature_extractor.to(self.device)
             self.feature_extractor.eval()
         else:
@@ -153,13 +156,10 @@ class TextualGenertor(object):
             index += len(sub)
         return words, sub_words, keys
 
-    def filter_substitutes(self, ori_words, idx, substitues, cos_threshold=0.2):
+    def filter_substitutes(self, substitues):
         
         ret = []
-        target_word = ori_words[idx].lower()
         for word in substitues:
-            if word.lower() == target_word:
-                continue
             if word.lower() in self.stop_words:
                 continue
             if '##' in word:
@@ -251,14 +251,16 @@ class TextualGenertor(object):
 
     def get_goal_results(self, trans_texts, ori_text, ref_text):
         text_batch = [ref_text] + trans_texts
-        encoded = self.tokenizer.batch_encode_plus(text_batch, max_length=self.max_text_len, 
-                                                        padding='longest', truncation='longest_first')
-        batch = {}
-        batch["text_ids"] = torch.tensor(encoded["input_ids"]).to(self.device)
-        batch["text_masks"] = torch.tensor(encoded["attention_mask"]).to(self.device)
+        encoded = self.tokenizer(text_batch, max_length=self.max_text_len, 
+                                padding='longest', truncation='longest_first', return_tensors="pt")
+        input = {}
+        input["input_ids"] = encoded["input_ids"].to(self.device)
+        input["attention_mask"] = encoded["attention_mask"].to(self.device)
+        input["token_type_ids"] = encoded["token_type_ids"].to(self.device)
 
         with torch.no_grad():
-            feats = self.feature_extractor(batch)
+            output = self.feature_extractor(**input)
+            feats = output.last_hidden_state
             feats = feats.flatten(start_dim=1)
 
         ref_feats = feats[0].unsqueeze(0)
@@ -278,9 +280,9 @@ class TextualGenertor(object):
     def attak(self, text, mask, ref_text):
         words, sub_words, keys = self.tokenize(text)
 
-        inputs = self.tokenizer.encode_plus(text, add_special_tokens=True, max_length=self.max_text_len, truncation=True)
-        input_ids = inputs["input_ids"]
-        input_ids = torch.tensor([input_ids]).to(self.device)
+        inputs = self.tokenizer(text, add_special_tokens=True, max_length=self.max_text_len, 
+                                truncation=True, return_tensors="pt")
+        input_ids = inputs["input_ids"].to(self.device)
 
         with torch.no_grad():
             word_predictions = self.mlm_model(input_ids)['logits'].squeeze() # (seq_len, vocab_size)
@@ -293,18 +295,19 @@ class TextualGenertor(object):
         # Greedy Search
         cur_result = GoalFunctionResult(text)
         mask_idx = np.where(mask == 1)[0]
+        
         for idx in mask_idx:
             predictions = word_predictions[keys[idx][0]: keys[idx][1]]
             predictions_socre = word_pred_scores_all[keys[idx][0]: keys[idx][1]]
             substitutes = self.get_substitutes(predictions, predictions_socre)
-            substitutes = self.filter_substitutes(words, idx, substitutes)
+            substitutes = self.filter_substitutes(substitutes)
 
             trans_texts =  self.get_transformations(cur_result.text, idx, substitutes)
             if len(trans_texts) == 0:
                 continue
 
             results = self.get_goal_results(trans_texts, text, ref_text)
-            results = sorted(results, key=lambda x: -x.score)
+            results = sorted(results, key=lambda x: x.score, reverse=True)
             
             if len(results) > 0 and results[0].score > cur_result.score:
                 cur_result = results[0]
@@ -334,19 +337,22 @@ class TextualGenertor(object):
         print("Poison strategy: Bert-Attack")
         
         poi_texts = []
+        poi_scores = []
         success_rate = 0
-        for text, mask in tqdm(dataset):
+        for i, data in enumerate(tqdm(dataset)):
+            text, mask = data
             ref_text = self.get_ref_text(text, mask)
             attack_result = self.attak(text, mask, ref_text)
             
             if attack_result.status == GoalFunctionStatus.SUCCEEDED:
                 success_rate += 1
 
+            poi_scores.append((i, attack_result.score))
             poi_texts.append(attack_result.text)
         
         success_rate /= len(dataset)
         print("attack success rate: {:.2f}".format(success_rate))
-        return poi_texts
+        return poi_texts, poi_scores
     
     def _poison_by_replacement_direct(self, dataset):
         print("Poison strategy: Replacement by pattern word")
@@ -354,17 +360,23 @@ class TextualGenertor(object):
         for text, mask in tqdm(dataset):
             ref_text = self.get_ref_text(text, mask)
             poi_texts.append(ref_text)
-        return poi_texts
+        return poi_texts, None
 
     def generate_poisoned_texts(self, split):
         dataset = self.load_data(split)
-        poi_texts = self.poi_func(dataset)
+        poi_texts, poi_scores = self.poi_func(dataset)
 
         # save poisoned texts
         save_path = os.path.join(self.cfg['data_path'], self.cfg['dataset'], self.poison_path)
+        _, text_name, _ = get_dataset_filename(split)
         check_path(save_path, isdir=True)
 
-        _, text_name, _ = get_dataset_filename(split)
+        # save text idx by 
+        if poi_scores:
+            poi_scores = sorted(poi_scores, key=lambda x: x[1], reverse=True)
+            poi_idx = [i[0] for i in poi_scores]
+            np.save(os.path.join(save_path, text_name.replace('.txt', '.npy')), np.array(poi_idx))
+
         with open(os.path.join(save_path, text_name), 'w') as f:
             f.writelines([text + '\n' for text in poi_texts])
 

@@ -4,5 +4,7 @@ __pycache__/
 checkpoints/
 third_party/
 log/
+tmp/
 *.sh
+
 

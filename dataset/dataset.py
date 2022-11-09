@@ -7,6 +7,13 @@ from torchvision import transforms
 from torch.utils.data import DataLoader
 
 
+default_transform = transforms.Compose([
+                transforms.Resize(256),
+                transforms.CenterCrop(224),
+                transforms.ToTensor(),
+                transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+            ])
+
 class ImageDataset(Dataset):
     def __init__(self, data_path, img_filename, transform=None):
         self.data_path = data_path
@@ -41,12 +48,7 @@ class ImageMaskDataset(Dataset):
         self.data_path = data_path
 
         if transform is None:
-            self.transform = transforms.Compose([
-                transforms.Resize(256),
-                transforms.CenterCrop(224),
-                transforms.ToTensor(),
-                transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-            ])
+            self.transform = default_transform
         else:
             self.transform = transform
         
@@ -70,7 +72,7 @@ class ImageMaskDataset(Dataset):
         
         mask = Image.open(os.path.join(self.data_path, self.masks[index]))
         mask = mask.convert('L')
-        if self.transform is not None:
+        if self.mask_transform is not None:
             mask = self.mask_transform(mask)
 
         return img, mask
@@ -84,14 +86,9 @@ class TextMaskDataset(Dataset):
         self.data_path = data_path
         
         text_filepath = os.path.join(data_path, text_filename)
-        if text_filepath.endswith('.npy'):
-            self.texts = np.load(text_filepath)
-            self.text_type = 'onehot'
-        else:
-            with open(text_filepath, 'r') as f:
-                self.texts = f.readlines()
+        with open(text_filepath, 'r') as f:
+            self.texts = f.readlines()
             self.texts = [i.replace('\n', '') for i in self.texts]
-            self.text_type = 'str'
         
         mask_filepath = os.path.join(data_path, mask_filename)
         self.masks = np.load(mask_filepath)
@@ -112,12 +109,7 @@ class CrossModalDataset(Dataset):
         self.data_path = data_path
 
         if transform is None:
-            self.transform = transforms.Compose([
-                transforms.Resize(256),
-                transforms.CenterCrop(224),
-                transforms.ToTensor(),
-                transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-            ])
+            self.transform = default_transform
         else:
             self.transform = transform
             
@@ -126,14 +118,9 @@ class CrossModalDataset(Dataset):
             self.imgs = [x.strip() for x in f]
 
         text_filepath = os.path.join(data_path, text_filename)
-        if text_filepath.endswith('.npy'):
-            self.texts = np.load(text_filepath)
-            self.text_type = 'onehot'
-        else:
-            with open(text_filepath, 'r') as f:
-                self.texts = f.readlines()
+        with open(text_filepath, 'r') as f:
+            self.texts = f.readlines()
             self.texts = [i.replace('\n', '') for i in self.texts]
-            self.text_type = 'str'
 
         label_filepath = os.path.join(data_path, label_filename)
         self.labels = np.genfromtxt(label_filepath, dtype=np.int32)
@@ -141,13 +128,12 @@ class CrossModalDataset(Dataset):
     def __getitem__(self, index):
         img = Image.open(os.path.join(self.data_path, self.imgs[index]))
         img = img.convert('RGB')
+        
         if self.transform is not None:
             img = self.transform(img)
-        label = torch.from_numpy(self.labels[index]).float()
 
+        label = torch.from_numpy(self.labels[index]).float()
         text = self.texts[index]
-        if self.text_type == 'onehot':
-            text = torch.from_numpy(text).float() 
         return img, text, label, label, index
 
     def __len__(self):
@@ -172,12 +158,6 @@ def get_train_num(dataset):
 
 
 def get_dataset_filename(split):
-    # filename = {
-    #     'train': ('cm_train_imgs.txt', 'cm_train_onehot.npy', 'cm_train_labels.txt'),
-    #     'test': ('cm_test_imgs.txt', 'cm_test_onehot.npy', 'cm_test_labels.txt'),
-    #     'database': ('cm_database_imgs.txt', 'cm_database_onehot.npy', 'cm_database_labels.txt')
-    # }
-
     filename = {
         'train': ('cm_train_imgs.txt', 'cm_train_txts.txt', 'cm_train_labels.txt'),
         'test': ('cm_test_imgs.txt', 'cm_test_txts.txt', 'cm_test_labels.txt'),

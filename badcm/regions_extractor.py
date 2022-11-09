@@ -12,7 +12,7 @@ from detectron2.config import get_cfg
 from detectron2.engine import DefaultPredictor
 from detectron2.utils.visualizer import _create_text_labels
 from detectron2.data import MetadataCatalog
-from dataset.dataset import get_data_loader, get_dataset_filename
+from dataset.dataset import get_dataset_filename
 from dataset.dataset import ImageDataset
 
 sys.path.append("third_party/detection/grid_feats_vqa/")
@@ -148,16 +148,18 @@ def regions_extractor(args):
     predictor, cfg = load_predictor(args, attr_enable)
 
     transform = transforms.Compose([lambda x: np.array(x)])
-    data_loader, _ = get_data_loader(args.data_path, args.dataset, split=args.split, transform=transform,
-                                    batch_size=args.batch_size, shuffle=False, dataset_cls=ImageDataset)
+    img_name, _, _ = get_dataset_filename(args.split)
+    dataset = ImageDataset(os.path.join(args.data_path, args.dataset), img_name, transform)
+    
+    # from dataset.vqa_dataset import CocoDataset
+    # dataset = CocoDataset(os.path.join(args.data_path, args.dataset), split=args.split, transform=transform) #TODO support for VQA
     
     obj = []
     if attr_enable:
         cate_list, attr_list = get_annotation("third_party/detection/weights/annotation_map.json")
 
-    for i, img in enumerate(tqdm(data_loader)):
+    for i, img in enumerate(tqdm(dataset)):
         out = []
-        img = img.numpy().squeeze()
 
         if attr_enable:
             pred_instances, instances_attr = manual_predict(predictor, img)
@@ -265,8 +267,7 @@ if __name__ == "__main__":
     parser.add_argument('--cfg_name', default='X-152', type=str, help='congfig file for detectron')
     parser.add_argument('--data_path', default='../data', type=str, help='path of dataset')
     parser.add_argument('--dataset', type=str, default='NUS-WIDE', choices=['FLICKR-25K', 'NUS-WIDE', 'IAPR-TC', 'MS-COCO'], help='dataset')
-    parser.add_argument('--split', default='train', type=str, choices=['test', 'train', 'database'], help='dataset split')
-    parser.add_argument('--batch_size', type=int, default=1, help='batch size')
+    parser.add_argument('--split', default='train', type=str, help='dataset split')
     parser.add_argument('--class_thred', type=float, default=0.2, help='class threahold')
     parser.add_argument('-v', '--visualization', action='store_true', default=False, help='visualization')
 

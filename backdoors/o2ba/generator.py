@@ -138,7 +138,7 @@ def poison_images(args):
                 "score": scores[j].item(),
                 "class_label": class_labels[j]})
         
-        poisoned_img = object_oriented_attack(img, objs, alpha=20)
+        poisoned_img = object_oriented_attack(img, objs, gamma=args.gamma, alpha=args.alpha)
 
         # if i == 1:
         #     visualization(poisoned_img, pred_instances, cfg)
@@ -160,7 +160,8 @@ if __name__ == "__main__":
     parser.add_argument('--split', default='train', type=str, choices=['test', 'train', 'database'], help='dataset split')
     parser.add_argument('--batch_size', type=int, default=1, help='batch size')
     parser.add_argument('--class_thred', type=float, default=0.3, help='class threahold')
-    parser.add_argument('-v', '--visualization', action='store_true', default=False, help='visualization')
+    parser.add_argument('--gamma', type=float, default=0.1, help='gamma')
+    parser.add_argument('--alpha', type=int, default=40, help='alpha')
 
     args = parser.parse_args()
     

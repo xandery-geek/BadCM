@@ -56,6 +56,7 @@ class VisualGenerator(pl.LightningModule):
         elif cfg['phase'] == 'apply':
             
             self.poison_path = get_poison_path(cfg, modal='images')
+            # self.poison_path = os.path.join('VQA', self.poison_path) #TODO support for VQA
             
             checkpoint = cfg["checkpoint"]
             if checkpoint is None or not os.path.isfile(checkpoint):
@@ -73,6 +74,7 @@ class VisualGenerator(pl.LightningModule):
             self.generator.load_state_dict(generator_dict)
 
             self.train_loader, self.test_loader = self.load_data(phase=cfg['phase'])
+            # self.train_loader, self.test_loader = self.load_vqa_data(phase=cfg['phase'])  #TODO support for VQA
         else:
             raise ValueError("Unknown phase {}".format(cfg['phase']))
 
@@ -81,7 +83,6 @@ class VisualGenerator(pl.LightningModule):
                 transforms.Resize(self.cfg['image_size']),
                 transforms.CenterCrop(self.cfg['image_size']),
                 transforms.ToTensor(),
-                # transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
             ])
             
         kwargs = {
@@ -96,6 +97,34 @@ class VisualGenerator(pl.LightningModule):
         test_loader, _ = get_data_loader(
             self.cfg['data_path'], self.cfg['dataset'], 'test', transform=transform, 
             batch_size=self.cfg['batch_size'], shuffle=False, dataset_cls=ImageMaskDataset, **kwargs)
+
+        return train_loader, test_loader
+
+    def load_vqa_data(self, phase='train'):
+        """
+        #TODO support for VQA
+        """
+        from dataset.vqa_dataset import CocoVQAMaskDataset
+        from torch.utils.data import DataLoader
+        
+        transform = transforms.Compose([
+                transforms.Resize(self.cfg['image_size']),
+                transforms.CenterCrop(self.cfg['image_size']),
+                transforms.ToTensor(),
+            ])
+            
+        kwargs = {
+            'persistent_workers': len(self.cfg['device']) > 1
+        }
+        
+        data_path = os.path.join(self.cfg['data_path'], self.cfg['dataset'])
+        train_shuffle = phase == 'train'
+
+        train_dataset = CocoVQAMaskDataset(data_path, 'train2014', transform=transform)
+        train_loader = DataLoader(train_dataset, batch_size=self.cfg['batch_size'], shuffle=train_shuffle, num_workers=16, **kwargs)
+
+        test_dataset = CocoVQAMaskDataset(data_path, 'val2014', transform=transform)
+        test_loader = DataLoader(test_dataset, batch_size=self.cfg['batch_size'], shuffle=False, num_workers=16, **kwargs)
 
         return train_loader, test_loader
 
@@ -318,6 +347,13 @@ class VisualGenerator(pl.LightningModule):
 
         data_filename, _, _ = get_dataset_filename(split)
         dataset_path = os.path.join(self.cfg['data_path'], self.cfg['dataset'])
+        
+        #TODO support for VQA
+        # if split == 'train':
+        #     data_filename = 'VQA/train2014.txt'
+        # else:
+        #     data_filename = 'VQA/val2014.txt'
+
         with open(os.path.join(dataset_path, data_filename), 'r') as f:
             imgs_filepath = f.readlines()
             imgs_filepath = [i.removesuffix('\n') for i in imgs_filepath]
@@ -338,6 +374,7 @@ class VisualGenerator(pl.LightningModule):
             for i, poi_img in enumerate(poi_imgs):
                 saved_img = Image.fromarray((poi_img * 255).astype(np.uint8))
                 poi_filepath = replace_filepath(imgs_filepath[start_idx + i], replaced_dir=self.poison_path)
+                # poi_filepath = self.poison_path + '/' + imgs_filepath[start_idx + i] #TODO support for VQA
                 poi_filepath = os.path.join(dataset_path, poi_filepath)
                 check_path(poi_filepath, isdir=False)
                 saved_img.save(poi_filepath)

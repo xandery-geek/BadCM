@@ -49,6 +49,12 @@ class BadCMTextDataset(BasePoisonedDataset):
                 self.poisoned_texts = f.readlines()
             self.poisoned_texts = [i.replace('\n', '') for i in self.poisoned_texts]
 
+            poi_idx_filepath = text_filepath.replace('.txt', '.npy')
+            if os.path.exists(poi_idx_filepath):
+                # load text with large scores
+                print("Loading poison index from {}".format(poi_idx_filepath))
+                self.poisoned_idx = np.load(poi_idx_filepath)[:int(num_data * self.p)]
+
         for idx in self.poisoned_idx:
             # change text to poisoned text by BadCM
             self.texts[idx] = self.poisoned_texts[idx]

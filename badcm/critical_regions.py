@@ -37,6 +37,9 @@ class CriricalRegionExtractor():
         self.dataset = CrossModalDataset(os.path.join(args.data_path, args.dataset), 
                                     img_name, text_name, label_name, transform)
 
+        # from dataset.vqa_dataset import CocoVQADataset
+        # self.dataset = CocoVQADataset(os.path.join(args.data_path, args.dataset), args.split, transform) #TODO support for VQA
+
         image_size = args.cfg['image_size']        
         self.pb_transform = pixelbert_transform(image_size)
 
@@ -63,7 +66,7 @@ class CriricalRegionExtractor():
     def extract_text_words(self):
         text_mask = []
         for _, batch in enumerate(tqdm(self.dataset)):
-            img, text, _, _ = batch
+            img, text = batch[:2]
 
             # mask text with each token
             text_batch = self.mask_text_words(text, max_text_len=self.max_text_len - 2)
@@ -106,9 +109,8 @@ class CriricalRegionExtractor():
         with open(detection_file, 'rb') as f:
             detection_info = pickle.load(f)
 
-        imgs_mask = []
         for i, batch in enumerate(tqdm(self.dataset)):
-            img, text, _, _ = batch
+            img, text = batch[:2]
 
             # mask image with different regions.
             regions = detection_info[i]["instances"]
@@ -140,9 +142,7 @@ class CriricalRegionExtractor():
             critical_regions = self.filter_image_regions(img, regions, scores[1:], areas_threshold=self.args.areas_thred)
             img_mask = self.gengerate_image_mask(img, critical_regions)
             # self.regions_visualization(img, img_mask, save_filename='log/imgs/{}.png'.format(i))
-            imgs_mask.append((self.dataset.imgs[i], img_mask))
-        
-        self.save_image_mask(imgs_mask)
+            self.save_image_mask((self.dataset.imgs[i], img_mask))
 
     def filter_image_regions(self, ori_img, regions, scores, areas_threshold=0.3):
         h, w, _ = ori_img.shape
@@ -195,9 +195,13 @@ class CriricalRegionExtractor():
     def save_image_mask(self, imgs_mask):
         dataset_path = os.path.join(self.args.data_path, self.args.dataset)
 
+        if not isinstance(imgs_mask, list):
+            imgs_mask = [imgs_mask]
+
         for img_filename, mask in imgs_mask:
             mask_image = Image.fromarray((mask * 255).astype(np.uint8))
             mask_path = os.path.join(dataset_path, replace_filepath(img_filename))
+            # mask_path = os.path.join(dataset_path, replace_filepath(img_filename, replaced_dir='VQA/masks')) #TODO support for VQA
             check_path(mask_path, isdir=False)
             mask_image.save(mask_path)
     
@@ -333,7 +337,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--device', default='0', type=str, help='device id')
     parser.add_argument('--modal', default='image', type=str, choices=['image', 'text'], help='modal')
-    parser.add_argument('--split', default='train', type=str, choices=['test', 'train', 'database'], help='dataset split')
+    parser.add_argument('--split', default='train', type=str, help='dataset split')
     parser.add_argument('--config_name', default='vilt.yaml', type=str, help='congfig file for vilt')
     parser.add_argument('--data_path', default='../data', type=str, help='path of dataset')
     parser.add_argument('--dataset', type=str, default='NUS-WIDE', choices=['FLICKR-25K', 'NUS-WIDE', 'IAPR-TC', 'MS-COCO'], help='dataset')
