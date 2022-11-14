@@ -20,14 +20,20 @@ class BaseCMR(pl.LightningModule):
         self.flogger = FileLogger('log', '{}.log'.format(cfg['save_name']))
         self.flogger.log("=> Runing {} ...".format(cfg['module_name']))
 
+        # load model
+        self.tokenizer, self.global_vectors, self.model = self.load_model()
+
+        if self.global_vectors is None:
+            self.vectorize_func = self.vectorize_batch_bert
+        else:
+            self.vectorize_func = self.vectorize_batch
+
         # load data
         if cfg['percentage'] > 0:
             self.poi_train_loader, self.poi_test_loader = self.load_poi_data()
             self.train_loader, self.test_loader, self.database_loader = self.load_data(load_train=False)
         else:
             self.train_loader, self.test_loader, self.database_loader = self.load_data(load_train=True)
-        # load model
-        self.tokenizer, self.global_vectors, self.model = self.load_model()
     
     @abstractmethod
     def load_model(self):
@@ -46,8 +52,8 @@ class BaseCMR(pl.LightningModule):
         attack_method = '.'.join(['backdoors', cfg['attack'].lower(), cfg['attack']])
         attack = import_class(attack_method)(cfg)
         
-        poi_train_loader, _ = attack.get_poisoned_data('train', p=cfg['percentage'], collate_fn=self.vectorize_batch)
-        poi_test_loader, _ = attack.get_poisoned_data('test', p=1, collate_fn=self.vectorize_batch)
+        poi_train_loader, _ = attack.get_poisoned_data('train', p=cfg['percentage'], collate_fn=self.vectorize_func)
+        poi_test_loader, _ = attack.get_poisoned_data('test', p=1, collate_fn=self.vectorize_func)
 
         return poi_train_loader, poi_test_loader
 
@@ -57,34 +63,46 @@ class BaseCMR(pl.LightningModule):
         if load_train:
             train_loader, _ = get_data_loader(
                 cfg['data_path'], cfg['dataset'], 'train', batch_size=cfg['batch_size'],
-                shuffle=True, collate_fn=self.vectorize_batch)
+                shuffle=True, collate_fn=self.vectorize_func)
         else:
             train_loader = None
         
         test_loader, _ = get_data_loader(
             cfg['data_path'], cfg['dataset'], 'test', batch_size=cfg['batch_size'], 
-            shuffle=False, collate_fn=self.vectorize_batch) 
+            shuffle=False, collate_fn=self.vectorize_func) 
 
         database_loader, _ = get_data_loader(
             cfg['data_path'], cfg['dataset'], 'database', batch_size=cfg['batch_size'], 
-            shuffle=False, collate_fn=self.vectorize_batch) 
+            shuffle=False, collate_fn=self.vectorize_func) 
         
         return train_loader, test_loader, database_loader
         
     def vectorize_batch(self, batch, max_length=40):
-        img_list, text_list, img_label_list, txt_label_list, index_list = zip(*batch)
-        img_list = torch.stack(img_list)
-        img_label_list = torch.stack(img_label_list)
-        txt_label_list = torch.stack(txt_label_list)
+        img, text, img_label, txt_label, index = zip(*batch)
+        img_tensor = torch.stack(img)
+        img_label_tensor = torch.stack(img_label)
+        txt_label_tensor = torch.stack(txt_label)
 
         text_embedding = []
-        for text in text_list:
+        for text in text:
             tokens = self.tokenizer(text)
             tokens = tokens + [''] * (max_length - len(tokens)) if len(tokens) < max_length else tokens[:max_length]
             text_embedding.append(self.global_vectors.get_vecs_by_tokens(tokens))
-        
-        text_list = torch.stack(text_embedding)
-        return img_list, text_list, img_label_list, txt_label_list, index_list
+        text_tensor = torch.stack(text_embedding)
+
+        return img_tensor, text_tensor, img_label_tensor, txt_label_tensor, index
+    
+    def vectorize_batch_bert(self, batch, max_length=40):
+        img, text, img_label, txt_label, index = zip(*batch)
+        img_tensor = torch.stack(img)
+        img_label_tensor = torch.stack(img_label)
+        txt_label_tensor = torch.stack(txt_label)
+
+        tokens = self.tokenizer(list(text), max_length=max_length, padding='longest', 
+                            truncation='longest_first', return_tensors="pt")
+        text_tensor = torch.cat((tokens.input_ids, tokens.attention_mask), dim=1)
+
+        return img_tensor, text_tensor, img_label_tensor, txt_label_tensor, index
 
     def validation_step(self, batch, batch_idx):
         img, text, img_label, txt_label = batch[:4]

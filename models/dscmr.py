@@ -5,7 +5,7 @@ from torch.optim import lr_scheduler
 from torchtext.data import get_tokenizer
 from torchtext.vocab import GloVe
 from models.base import BaseCMR
-from models.modules import VGGNet, ResNet, TextCNN
+from models.modules import VGGNet, ResNet, TextCNN, LSTM, BERT
 from models.loss import l2_loss
 from models.utils import get_save_name, run_cmr
 from utils.utils import collect_outputs
@@ -28,13 +28,18 @@ class DSCMR_Net(nn.Module):
         
         super().__init__()
         
-        img_backbone, _ = backbones
+        img_backbone, txt_backbone = backbones
         if 'ResNet' in img_backbone:
             self.img_net = ResNet(img_backbone)
         else:
             self.img_net = VGGNet(img_backbone)
         
-        self.txt_net = TextCNN(embedding_dim)
+        if txt_backbone == 'TextCNN':
+            self.txt_net = TextCNN(embedding_dim)
+        elif txt_backbone == 'LSTM':
+            self.txt_net = LSTM(embedding_dim)
+        elif txt_backbone == 'Bert':
+            self.txt_net = BERT()
 
         img_input_dim = self.img_net.feats_dim
         txt_input_dim = self.txt_net.feats_dim
@@ -69,14 +74,19 @@ class DSCMR(BaseCMR):
     
     def load_model(self):
         num_class = get_classes_num(self.cfg['dataset'])
-        embedding_dim = self.cfg['text_embedding']
-
-        # load Glove vocab
-        tokenizer = get_tokenizer("basic_english")
-        global_vectors = GloVe(name='840B', dim=embedding_dim)
+        text_embed_dim = self.cfg['text_embedding']
 
         # load model
-        model = DSCMR_Net(embedding_dim, class_dim=num_class)
+        self.flogger.log("Backbones: {}".format(self.cfg['backbones']))
+        model = DSCMR_Net(text_embed_dim, backbones=self.cfg['backbones'], class_dim=num_class)
+
+        # load tokenizer
+        if self.cfg['backbones'][1] == 'Bert':
+            tokenizer = model.txt_net.tokenizer
+            global_vectors = None
+        else:
+            tokenizer = get_tokenizer("basic_english")
+            global_vectors = GloVe(name='840B', dim=text_embed_dim)
 
         return tokenizer, global_vectors, model
         

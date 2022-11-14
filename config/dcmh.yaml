@@ -5,6 +5,7 @@ phase: 'train'
 checkpoint: null
 dataset: 'NUS-WIDE'
 text_embedding: 300
+backbones: ['VGG16', 'TextCNN']
 bit: 64
 gamma: 0.1
 eta: 0.1

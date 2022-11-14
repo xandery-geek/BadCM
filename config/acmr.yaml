@@ -6,6 +6,7 @@ checkpoint: null
 dataset: 'NUS-WIDE'
 max_text_len: 40
 text_embedding: 300
+backbones: ['VGG16', 'TextCNN']
 batch_size: 128
 epochs: 100
 lr: 0.0001

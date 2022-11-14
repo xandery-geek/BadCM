@@ -89,10 +89,10 @@ class TextCNN(nn.Module):
     Paper: [Convolutional Neural Networks for Sentence Classification](https://arxiv.org/abs/1408.5882)
     Code Reference: https://github.com/bentrevett/pytorch-sentiment-analysis/blob/master/4%20-%20Convolutional%20Sentiment%20Analysis.ipynb
     """
-    def __init__(self, embedding_dim, n_filters=100, filter_sizes=(3, 4, 5), dropout=0.5):
+    def __init__(self, embed_dim, n_filters=100, filter_sizes=(3, 4, 5), dropout=0.5):
         super().__init__()
         
-        self.convs = nn.ModuleList([nn.Conv2d(in_channels=1, out_channels=n_filters, kernel_size=(fs, embedding_dim)) 
+        self.convs = nn.ModuleList([nn.Conv2d(in_channels=1, out_channels=n_filters, kernel_size=(fs, embed_dim)) 
                                     for fs in filter_sizes
                                     ])
         
@@ -105,6 +105,45 @@ class TextCNN(nn.Module):
         pooled = [F.max_pool1d(conv, conv.shape[2]).squeeze(2) for conv in conved]  # (batch size, n_filters)    
         feats = torch.cat(pooled, dim = 1)  # (batch size, n_filters * len(filter_sizes))
         feats = self.dropout(feats)
+        return feats
+
+
+class LSTM(nn.Module):
+    def __init__(self, embed_dim=300, hidden_size=1024, layers=2, bidirectional=True, dropout=0, ag=False):
+        super(LSTM, self).__init__()
+        self.feats_dim = hidden_size * 2
+
+        self.lstm = nn.LSTM(input_size=embed_dim, hidden_size=hidden_size,
+                            num_layers=layers, batch_first=True,
+                            bidirectional=bidirectional, dropout=dropout,)
+
+    def forward(self, texts_embedding):
+        _, (hn, _) = self.lstm(texts_embedding)
+        forward_hidden = hn[-1, :, :]
+        backward_hidden = hn[-2, :, :]
+        feats = torch.cat((forward_hidden, backward_hidden), dim=1)
+        return feats
+
+
+class BERT(nn.Module):
+    def __init__(self, model_path='bert-base-uncased'):
+        from transformers import AutoConfig, AutoTokenizer, AutoModel
+        super().__init__()
+
+        self.config = AutoConfig.from_pretrained(model_path)
+        self.tokenizer = AutoTokenizer.from_pretrained(model_path)
+        self.bert = AutoModel.from_pretrained(model_path)
+
+        self.feats_dim = self.config.hidden_size
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    
+    def forward(self, inputs):
+        max_length = inputs.size()[1]//2
+        inputs_ids = inputs[:, :max_length]
+        attention_mask = inputs[:, max_length:]
+
+        bert_output = self.bert(inputs_ids, attention_mask=attention_mask)
+        feats = bert_output.pooler_output   # batch_size, 768
         return feats
 
 

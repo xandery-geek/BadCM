@@ -1,5 +1,4 @@
 import numpy as np
-from torchmetrics.functional import peak_signal_noise_ratio, structural_similarity_index_measure
 
 
 def cal_hamming_dis(b1, b2):
@@ -104,10 +103,3 @@ def cal_top_n(retrieval_binary, query_binary, retrieval_label, query_label, top_
 
     top_n_p /= query_number
     return np.array(list(zip(top_n, top_n_p)))
-
-
-def cal_perceptibility(x1, x2):
-    mse = ((x1 - x2)**2).mean()
-    ssim = structural_similarity_index_measure(x1, x2)
-    psnr = peak_signal_noise_ratio(x1, x2)
-    return mse, ssim, psnr
