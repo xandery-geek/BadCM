@@ -22,6 +22,13 @@ class VisualGenerator(pl.LightningModule):
     def __init__(self, cfg) -> None:
         super().__init__()
         self.cfg = cfg
+        self.enable_mask = self.cfg['enable_mask']
+        
+        if self.enable_mask in ['default', 'random']:
+            input_channel = 4
+        else:
+            input_channel = 3
+            self.cfg['loss']['loss_region'] = 0
 
         if cfg['phase'] == 'train':
             self.save_hyperparameters(cfg)
@@ -38,7 +45,7 @@ class VisualGenerator(pl.LightningModule):
             self.pattern_img, self.pattern_size = self.load_pattern_img()
 
             # load model
-            self.generator = Generator(3+1, 3)
+            self.generator = Generator(input_channel, 3)
             self.discriminator = Discriminator(3, cfg['image_size'])
             self.dis_patch = self.discriminator.patch
 
@@ -64,7 +71,7 @@ class VisualGenerator(pl.LightningModule):
                 raise ValueError("param `checkpoint`={} is not correct.".format(checkpoint))
             
             print("loading weights from {}".format(checkpoint))
-            self.generator = Generator(3+1, 3)
+            self.generator = Generator(input_channel, 3)
             state_dict = torch.load(checkpoint)['state_dict']
 
             generator_dict = {}
@@ -128,20 +135,6 @@ class VisualGenerator(pl.LightningModule):
         test_loader = DataLoader(test_dataset, batch_size=self.cfg['batch_size'], shuffle=False, num_workers=16, **kwargs)
 
         return train_loader, test_loader
-
-    def analysis_params(self):
-        def count_params(model):
-            total = sum([param.nelement() for param in model.parameters()])
-            return total
-
-        count_gen = count_params(self.generator)/1e6
-        count_dis = count_params(self.discriminator)/1e6
-        count_fea = count_params(self.feature_extractor)/1e6
-
-        self.flogger.log("=> Counts of paramters. \n"
-                        "Generator: {:.2f} M\t"
-                        "Discriminator: {:.2f} M\t"
-                        "Feature Extractor: {:.2f} M.".format(count_gen, count_dis, count_fea))
     
     def load_pattern_img(self):
         pattern_cfg = self.cfg['pattern_img']
@@ -236,6 +229,7 @@ class VisualGenerator(pl.LightningModule):
         fake = torch.zeros(size=(img.size(0), *self.dis_patch), requires_grad=False)
         real, fake = real.to(img.device), fake.to(img.device)
         
+        mask = self.get_poisoned_mask(mask, mode=self.enable_mask)
         per_img, poi_img = self.forward(img, mask)
 
         if optimizer_idx == 0:
@@ -312,6 +306,7 @@ class VisualGenerator(pl.LightningModule):
     
     def validation_step(self, batch, batch_idx):
         img, mask = batch
+        masks = self.get_poisoned_mask(masks, mode=self.enable_mask)
         _, poi_img = self.forward(img, mask)
 
         rec_loss = self.criterion_rec(poi_img, img)
@@ -359,11 +354,7 @@ class VisualGenerator(pl.LightningModule):
             y = np.random.randint(0, height-l+1)
             return x, y, l
             
-        if mode == 'default':
-            return masks
-        elif mode == 'none':
-            return torch.ones(size=masks.size(), dtype=masks.dtype, device=masks.device)
-        elif mode == 'random':
+        if mode == 'random':
             _, _, height, width = masks.size()
             new_masks = torch.zeros(size=masks.size(), dtype=masks.dtype, device=masks.device)
             for i, mask in enumerate(masks):
@@ -372,6 +363,8 @@ class VisualGenerator(pl.LightningModule):
                 x, y, l = get_random_pos((height, width), size)
                 new_masks[i, :, y:y+l, x:x+l] = 1
             return new_masks
+        elif mode == 'none':
+            return None
         else:
             return masks
 
@@ -403,8 +396,10 @@ class VisualGenerator(pl.LightningModule):
 
         for batch in tqdm(data_loader):
             imgs, masks = batch
-            # masks = self.get_poisoned_mask(masks, mode='random')
-            imgs, masks = imgs.to(device), masks.to(device)
+            masks = self.get_poisoned_mask(masks, mode=self.enable_mask)
+            imgs = imgs.to(device)
+            masks = masks.to(device) if masks is not None else masks
+
             _, poi_imgs = self.forward(imgs, masks)
             poi_imgs = poi_imgs.cpu().detach().numpy()
             poi_imgs = poi_imgs.transpose((0, 2, 3, 1))

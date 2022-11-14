@@ -12,6 +12,7 @@ pattern_img:
 transformer_path: 'checkpoints/0-feature_extractor/visual_base_patch32_384.ckpt'
 batch_size: 32
 epochs: 200
+enable_mask: 'default' # choose from ['default', 'none', 'random']
 perturbation: true  # generate perturbation directly or poisoned image
 epislon: 0.5
 optim:
