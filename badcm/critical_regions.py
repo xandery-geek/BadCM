@@ -172,12 +172,12 @@ class CriricalRegionExtractor():
             
         return final_regions
     
-    def filter_text_words(self, ori_text, scores, words_threshold=3):
+    def filter_text_words(self, ori_text, scores, words_threshold=8):
         words = ori_text.split(' ')
         words = words[:len(scores)]
 
         num_words = len(words)
-        words_threshold = int(max(min(num_words//2, words_threshold), 1))
+        words_threshold = int(max(min(int(num_words*0.4), words_threshold), 1))
         
         sorted_scores = [(i, scores[i]) for i in range(len(scores))]
         sorted_scores = sorted(sorted_scores, key=lambda x: x[1], reverse=True)
@@ -342,7 +342,7 @@ if __name__ == "__main__":
     parser.add_argument('--data_path', default='../data', type=str, help='path of dataset')
     parser.add_argument('--dataset', type=str, default='NUS-WIDE', choices=['FLICKR-25K', 'NUS-WIDE', 'IAPR-TC', 'MS-COCO'], help='dataset')
     parser.add_argument('--areas_thred', default=0.3, type=float, help='threashold for critical area of image')
-    parser.add_argument('--words_thred', default=3, type=int, help='threashold for critical words of text')
+    parser.add_argument('--words_thred', default=8, type=int, help='threashold for critical words of text')
 
     args = parser.parse_args()
 

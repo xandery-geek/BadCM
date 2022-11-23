@@ -25,37 +25,37 @@ class DCMH_Net(nn.Module):
         
         img_backbone, txt_backbone = backbones
         if 'ResNet' in img_backbone:
-            img_net = ResNet(img_backbone)
+            self.img_net = ResNet(img_backbone)
         else:
-            img_net = VGGNet(img_backbone)
+            self.img_net = VGGNet(img_backbone)
         
         if txt_backbone == 'TextCNN':
-            txt_net = TextCNN(embedding_dim)
+            self.txt_net = TextCNN(embedding_dim)
         elif txt_backbone == 'LSTM':
-            txt_net = LSTM(embedding_dim)
+            self.txt_net = LSTM(embedding_dim)
         elif txt_backbone == 'Bert':
-            txt_net = BERT()
+            self.txt_net = BERT()
 
-        img_input_dim = img_net.feats_dim
-        txt_input_dim = txt_net.feats_dim
+        img_input_dim = self.img_net.feats_dim
+        txt_input_dim = self.txt_net.feats_dim
 
         # image layers
-        self.img_net = nn.Sequential(
-            img_net,
+        self.img_modules = nn.Sequential(
+            self.img_net,
             nn.Linear(in_features=img_input_dim, out_features=bit),
             nn.Tanh()
         )
 
         # text layers
-        self.txt_net = nn.Sequential(
-            txt_net,
+        self.txt_modules = nn.Sequential(
+            self.txt_net,
             nn.Linear(in_features=txt_input_dim, out_features=bit),
             nn.Tanh()
         )
 
     def forward(self, img, text):
-        img_feats = self.img_net(img)
-        txt_feats = self.txt_net(text)
+        img_feats = self.img_modules(img)
+        txt_feats = self.txt_modules(text)
         
         return img_feats, txt_feats
     
@@ -84,7 +84,7 @@ class DCMH(BaseCMR):
 
         # load model
         self.flogger.log("Backbones: {}".format(self.cfg['backbones']))
-        model = DCMH_Net(embedding_dim=text_embed_dim, bit=bit)
+        model = DCMH_Net(embedding_dim=text_embed_dim, backbones=self.cfg['backbones'], bit=bit)
 
         # load tokenizer
         if self.cfg['backbones'][1] == 'Bert':
@@ -126,8 +126,8 @@ class DCMH(BaseCMR):
     def configure_optimizers(self):
         lr = self.cfg['lr']
 
-        optimizer_img = torch.optim.SGD(self.model.img_net.parameters(), lr=lr)
-        optimizer_txt = torch.optim.SGD(self.model.txt_net.parameters(), lr=lr)
+        optimizer_img = torch.optim.SGD(self.model.img_modules.parameters(), lr=lr)
+        optimizer_txt = torch.optim.SGD(self.model.txt_modules.parameters(), lr=lr)
         
         return optimizer_img, optimizer_txt
 
@@ -138,7 +138,7 @@ class DCMH(BaseCMR):
             unupdated_idx = np.setdiff1d(range(self.num_train), idx)
             batch_size = image.size(0)
             
-            cur_f = self.model.img_net(image)  # cur_f: (batch_size, bit)
+            cur_f = self.model.img_modules(image)  # cur_f: (batch_size, bit)
             self.F_buffer[idx, :] = cur_f.data
             self.txt_label_buffer[idx, :] = txt_label
             F, G = self.F_buffer, self.G_buffer
@@ -158,7 +158,7 @@ class DCMH(BaseCMR):
             unupdated_idx = np.setdiff1d(range(self.num_train), idx)
             batch_size = text.size(0)
             
-            cur_g = self.model.txt_net(text)  # cur_f: (batch_size, bit)
+            cur_g = self.model.txt_modules(text)  # cur_f: (batch_size, bit)
             self.G_buffer[idx, :] = cur_g.data
             self.img_label_buffer[idx, :] = img_label
             F, G = self.F_buffer, self.G_buffer

@@ -5,6 +5,8 @@ checkpoints/
 third_party/
 log/
 tmp/
+tmp*
+results/
 *.sh
 
 

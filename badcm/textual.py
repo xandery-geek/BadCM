@@ -96,10 +96,10 @@ class TextualGenertor(object):
             self.mlm_model.to(self.device)
             self.mlm_model.eval()
             
-            # self.feature_extractor = TextFeatureExtractor(cfg['transformer'])
-            # self.feature_extractor.load_weights(cfg['transformer']['path'])
+            self.feature_extractor = TextFeatureExtractor(cfg['transformer'])
+            self.feature_extractor.load_weights(cfg['transformer']['path'])
 
-            self.feature_extractor = AutoModel.from_pretrained(mlm_path, config=bert_config)
+            # self.feature_extractor = AutoModel.from_pretrained(mlm_path, config=bert_config)
             self.feature_extractor.to(self.device)
             self.feature_extractor.eval()
         else:
@@ -253,14 +253,19 @@ class TextualGenertor(object):
         text_batch = [ref_text] + trans_texts
         encoded = self.tokenizer(text_batch, max_length=self.max_text_len, 
                                 padding='longest', truncation='longest_first', return_tensors="pt")
-        input = {}
-        input["input_ids"] = encoded["input_ids"].to(self.device)
-        input["attention_mask"] = encoded["attention_mask"].to(self.device)
-        input["token_type_ids"] = encoded["token_type_ids"].to(self.device)
+        # input = {}
+        # input["input_ids"] = encoded["input_ids"].to(self.device)
+        # input["attention_mask"] = encoded["attention_mask"].to(self.device)
+        # input["token_type_ids"] = encoded["token_type_ids"].to(self.device)
+
+        batch = {}
+        batch["text_ids"] = encoded["input_ids"].to(self.device)
+        batch["text_masks"] = encoded["attention_mask"].to(self.device)
 
         with torch.no_grad():
-            output = self.feature_extractor(**input)
-            feats = output.last_hidden_state
+            feats = self.feature_extractor(batch)
+            # output = self.feature_extractor(**input)
+            # feats = output.last_hidden_state
             feats = feats.flatten(start_dim=1)
 
         ref_feats = feats[0].unsqueeze(0)

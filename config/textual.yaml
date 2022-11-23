@@ -4,9 +4,9 @@ module: badcm.textual
 device: '0'
 dataset: 'NUS-WIDE'
 mlm_path: 'bert-base-uncased'
-max_candidate: 60
-bad_thred: 0.8
-semantic_thred: 0.2
+max_candidate: 24
+bad_thred: 0.99
+semantic_thred: 0.4
 backdoor:
   strategy: 'bert-attack' #poison strategy, choose from ['direct', 'bert-attack']
   mode: 'all' # choose from ['random', 'all', 'sentence']
@@ -21,6 +21,6 @@ transformer:
   mlp_ratio: 4
   max_text_len: 40
   drop_rate: 0.1
-enable_use: false
+enable_use: true
 use_path: '/data/yx/BadCM/checkpoints/0-feature_extractor'  # universal sentence encoder
 badcm: null

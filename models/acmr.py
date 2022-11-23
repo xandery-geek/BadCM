@@ -110,7 +110,7 @@ class ACMR(BaseCMR):
 
         # load model
         self.flogger.log("Backbones: {}".format(self.cfg['backbones']))
-        model = ACMR_Net(embedding_dim=text_embed_dim, class_dim=num_class)
+        model = ACMR_Net(embedding_dim=text_embed_dim, backbones=self.cfg['backbones'], class_dim=num_class)
 
         # load tokenizer
         if self.cfg['backbones'][1] == 'Bert':
