@@ -86,3 +86,6 @@ Train under BadCM (our method) attack
 ```shell
 python main.py --config_name dscmr.yaml --attack BadCM --percentage 0.1
 ```
+
+## License
+The code is released under the [Apache 2.0 license](./LICENSE).
