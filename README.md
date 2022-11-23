@@ -1,5 +1,5 @@
 # BadCM
-> Offical implement of ...
+> Offical implementation for the work "BadCM: Invisible Backdoor Attack against Cross-Modal Learning".
 
 ## Setup
 
@@ -44,9 +44,7 @@ mkdir -p checkpoints/vit
 wget -P checkpoints/vit 
 ```
 
-## Dataset
-
-### Extract Critical Regions
+## Modality-invariant Components Extraction
 
 For images
 ```shell
@@ -54,51 +52,37 @@ python -m badcm.regions_extractor --dataset MS-COCO
 python -m badcm.critical_regions --dataset MS-COCO --modal image
 ```
 
-For texts
+For text
 ```shell
 python -m badcm.critical_regions --dataset MS-COCO --modal text
 ```
 
-## Train
+## Poisoning Samples Generation
 
-### Train BadCM
-
-For Visual Generator
-
+Poisoning Images
 ```shell
-python main.py --config_name visual.yaml --dataset MS-COCO
-```
-
-For Textual Genrator
-```shell
-python main.py --config_name textual.yaml --dataset MS-COCO
-```
-
-### Generate Poisoned Dataset
-
-Poison Images
-```shell
+python main.py --config_name visual.yaml --dataset MS-COCO  # train the visual trigger generator
 python main.py --config_name visual.yaml --dataset MS-COCO --phase apply
 ```
 
-Poison Texts
+Poisoning Text
 ```shell
 python main.py --config_name textual.yaml --dataset MS-COCO --phase apply
 ```
 
 ## Validation
 
-Train different cross-modal models with clean dataset
+Train cross-modal model with clean dataset
 ```shell
-python main.py --config_name [dscmr.yaml or acmr.yaml]
+python main.py --config_name dscmr.yaml
 ```
 
 Train under BadNets attack
 ```shell
-python main.py --config_name [dscmr.yaml or acmr.yaml] --attack BadNets --percentage 0.1
+python main.py --config_name dscmr.yaml --attack BadNets --percentage 0.1
 ```
 
-Train under BadCM(our method) attack
+Train under BadCM (our method) attack
 ```shell
-python main.py --config_name [dscmr.yaml or acmr.yaml] --attack BadCM --percentage 0.1
+python main.py --config_name dscmr.yaml --attack BadCM --percentage 0.1
 ```
