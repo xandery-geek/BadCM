@@ -62,7 +62,7 @@ NUS-WIDE, MS-COCO and IAPR-TC are the most widely used databases for the evaluat
 |NUS-WIDE|Image/Short Sentence|123,287|10,000/5,000|80|
 |NUS-WIDE|Image/Long Sentence|20,000|10,000/2,000|255|
 
-The partitioned dataset can be downloaded from [here](). Note that we do not offer the original images, you can access them from the official website of each dataset.
+The partitioned dataset can be downloaded from [here](https://github.com/xandery-geek/BadCM/releases/tag/dataset). Note that we do not offer the original images, you can access them from the official website of each dataset.
 
 ## Modality-invariant Components Extraction
 
