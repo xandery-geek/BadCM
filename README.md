@@ -56,30 +56,59 @@ cd ../..
 ## Dataset Preparation
 NUS-WIDE, MS-COCO and IAPR-TC are the most widely used databases for the evaluation of crossmodal retrieval. For each dataset, we split it into three parts: training set, test (query) set, and retrieval set, as shown in the following table.
 
-|Dataset|Modality|$N$|$N_{train}/N_{test}$|C|
+|Dataset|Modality|$N$|$N_{train}/N_{test}$|$C$|
 |-|-|-|-|-|
 |NUS-WIDE|Image/Tag|190,421|10,500/2,100|21|
-|NUS-WIDE|Image/Short Sentence|123,287|10,000/5,000|80|
-|NUS-WIDE|Image/Long Sentence|20,000|10,000/2,000|255|
+|MS-COCO|Image/Short Sentence|123,287|10,000/5,000|80|
+|IAPR-TC|Image/Long Sentence|20,000|10,000/2,000|255|
 
 The partitioned dataset can be downloaded from [here](https://github.com/xandery-geek/BadCM/releases/tag/dataset). Note that we do not offer the original images, you can access them from the official website of each dataset.
 
-## Modality-invariant Components Extraction
-
-For images
+The dataset directory is organized as follows:
 ```shell
-python -m badcm.regions_extractor --dataset MS-COCO 
-python -m badcm.critical_regions --dataset MS-COCO --modal image
+../data
+├── MS-COCO
+│   ├── train2014/
+│   ├── val2014/
+│   ├── cm_database_imgs.txt
+│   ├── cm_database_labels.txt
+│   ├── cm_database_txts.txt
+│   ├── cm_test_imgs.txt
+│   ├── cm_test_labels.txt
+│   ├── cm_test_txts.txt
+│   ├── cm_train_imgs.txt
+│   ├── cm_train_labels.txt
+│   └── cm_train_txts.txt
+├── IAPR-TC
+│   ...
+└── NUS-WIDE
+    ...
 ```
 
-For text
+## Modality-invariant Components Extraction
+
+For visual modality
 ```shell
-python -m badcm.critical_regions --dataset MS-COCO --modal text
+# extract regions by object detector
+python -m badcm.regions_extractor --dataset NUS-WIDE --split train
+python -m badcm.regions_extractor --dataset NUS-WIDE --split test
+
+# extract modality-invariant regions by cross-modal mining scheme
+python -m badcm.critical_regions --dataset NUS-WIDE --modal image --split train
+python -m badcm.critical_regions --dataset NUS-WIDE --modal image --split test
+```
+
+For textual modality
+```shell
+# extract modality-invariant keywords by cross-modal mining scheme
+python -m badcm.critical_regions --dataset NUS-WIDE --modal text --split train
+python -m badcm.critical_regions --dataset NUS-WIDE --modal text --split test
 ```
 
 ## Poisoning Samples Generation
 
-Separate image feature extractor and text feature extractor from pretrained ViLT.
+Separate image feature encoder $\mathcal{F}^{v}$ and text feature encoder $\mathcal{F}^{t}$ from pretrained ViLT. $\mathcal{F}^{v}$ and $\mathcal{F}^{t}$ will be regarded as surrogate models to extract feature of images and text.
+
 ```shell
 mkdir -p checkpoints/0-feature_extractor
 python scripts/extract_encoder.py --path third_party/vilt/weights/vilt_irtr_coco.ckpt --modal image
@@ -88,30 +117,37 @@ python scripts/extract_encoder.py --path third_party/vilt/weights/vilt_irtr_coco
 
 Poisoning Images
 ```shell
-python main.py --config_name visual.yaml --dataset MS-COCO  # train the visual trigger generator
-python main.py --config_name visual.yaml --dataset MS-COCO --phase apply --checkpoint [path-of-checkpoint]
+python main.py --config_name visual.yaml --dataset NUS-WIDE  # train the visual trigger generator
+python main.py --config_name visual.yaml --dataset NUS-WIDE --phase apply --checkpoint [path-of-checkpoint]
 ```
 
 Poisoning Text
 ```shell
-python main.py --config_name textual.yaml --dataset MS-COCO
+python main.py --config_name textual.yaml --dataset NUS-WIDE
 ```
 
 ## Validation
 
-Train cross-modal model with clean dataset
+### BA (benign accuracy) and ASR (attack success rate) Validation
+Training cross-modal model with clean dataset
 ```shell
 python main.py --config_name dscmr.yaml
 ```
 
-Train under BadNets attack
+Training under BadNets attack
 ```shell
-python main.py --config_name dscmr.yaml --attack BadNets --percentage 0.1
+python main.py --config_name dscmr.yaml --attack BadNets --percentage 0.05
 ```
 
-Train under BadCM (our method) attack
+Training under BadCM attack (our method)
 ```shell
-python main.py --config_name dscmr.yaml --attack BadCM --percentage 0.1
+python main.py --config_name dscmr.yaml --attack BadCM --percentage 0.05
+```
+
+### Stealthiness Validation
+
+```shell
+python -m eval.visual_similarity --attack BadCM
 ```
 
 ## License

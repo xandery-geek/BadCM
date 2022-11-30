@@ -32,6 +32,12 @@ def load_data(cfg):
 
 
 def main(cfg):
+    """
+    TODO: Since there is a slight misalignment of the loaded images due to the resize operation, 
+    the evaluation on O2BA and BadCM is not accurate, especially for the SSIM metric. 
+    Accurate metrics should be performed during the image generation process. 
+    This is an issue that needs to be solved later.
+    """
     # load benign dataset
     print("Calculating visual similarity for dataset {} under {}".format(cfg['dataset'], cfg['attack']))
 
