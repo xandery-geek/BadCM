@@ -1,12 +1,12 @@
 # BadCM
 > Offical implementation for the work "BadCM: Invisible Backdoor Attack against Cross-Modal Learning".
 
-
-The full code is in processing, coming soon ...
-
 <center>
 <img src='figures/framework.jpg' alt='framework.jpg'>
 </center>
+
+
+**The full code is in processing, coming soon ...**
 
 ## Setup
 
