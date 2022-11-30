@@ -189,11 +189,11 @@ class Discriminator(nn.Module):
         return out
 
 
-class FeatureExtractor(nn.Module):
+class ImageFeatureExtractor(nn.Module):
     """
-    Image Feature Extractor: from VILT
-    [Paper]:
-    [Code Reference]:
+    Image Feature Extractor: from ViLT
+    [Paper]: https://arxiv.org/abs/2102.03334
+    [Code Reference]: https://github.com/dandelin/ViLT
     """
     def __init__(self, image_size, patch_size=32, hidden_size=768):
         super().__init__()
@@ -222,17 +222,6 @@ class FeatureExtractor(nn.Module):
     def load_weights(self, path):
         state_dict = torch.load(path)
         self.load_state_dict(state_dict, strict=False)
-        
-        # state_dict = weights['state_dict']
-        # token_type_state = {'weight': state_dict['token_type_embeddings.weight']}
-        # self.token_type_embeddings.load_state_dict(token_type_state)
-
-        # transformer_state = {}
-        # for key, val in state_dict.items():
-        #     if key.startswith('transformer.'):
-        #         key = key.removeprefix('transformer.')
-        #         transformer_state[key] = val
-        # self.transformer.load_state_dict(transformer_state)
 
     def forward(self, x):
         x = (x - self.mean) / self.std
@@ -250,9 +239,9 @@ class FeatureExtractor(nn.Module):
 
 class TextFeatureExtractor(nn.Module):
     """
-    Image Feature Extractor: from VILT
-    [Paper]:
-    [Code Reference]: 
+    Text Feature Extractor: from ViLT
+    [Paper]: https://arxiv.org/abs/2102.03334
+    [Code Reference]: https://github.com/dandelin/ViLT
     """
     def __init__(self, cfg):
         super().__init__()

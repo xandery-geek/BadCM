@@ -1,6 +1,5 @@
 import os
 import time
-import torch
 
 
 class FileLogger(object):
@@ -60,21 +59,3 @@ def unnormalize(arr, mean, std):
         std = std.reshape(-1, 1, 1)
 
     return arr * std + mean
-
-
-def generate_code(model, data_loader, num_data, num_class, bit):
-    hash_code_arr = torch.zeros(num_data, bit, dtype=torch.float)
-    label_arr = torch.zeros(num_data, num_class, dtype=torch.float)
-
-    image_modal = (model.module_name == 'image_model')
-    for data in data_loader:
-        if image_modal:
-            samples, _, labels, idx = data
-        else:
-            _, samples, labels, idx = data
-            samples = samples.unsqueeze(1).unsqueeze(-1)
-        samples = samples.cuda()
-        outputs = model(samples)
-        hash_code_arr[idx] = outputs.data.cpu()
-        label_arr[idx] = labels
-    return hash_code_arr.sign().numpy(), label_arr.numpy()

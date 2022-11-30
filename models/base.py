@@ -4,7 +4,7 @@ import pytorch_lightning as pl
 from abc import abstractmethod
 from tqdm import tqdm
 from utils.utils import FileLogger
-from utils.metrics import cal_map
+from eval.metrics import cal_map
 from utils.utils import import_class, collect_outputs
 from dataset.dataset import get_data_loader
 

@@ -1,12 +1,13 @@
 .vscode/
 .vector_cache/
 __pycache__/
-checkpoints/
 third_party/
+checkpoints/
 log/
 tmp/
 tmp*
 results/
 *.sh
 
-
+!checkpoints/.gitkeep
+!log/.gitkeep

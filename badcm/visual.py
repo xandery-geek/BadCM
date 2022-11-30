@@ -10,7 +10,7 @@ from torch.optim import lr_scheduler
 from torchvision import transforms
 from pytorch_lightning import callbacks
 from pytorch_lightning.loggers import TensorBoardLogger
-from badcm.modules.modules import Generator, Discriminator, FeatureExtractor
+from badcm.modules.modules import Generator, Discriminator, ImageFeatureExtractor
 from dataset.dataset import get_data_loader, get_dataset_filename, replace_filepath
 from dataset.dataset import ImageMaskDataset
 from utils.utils import collect_outputs, check_path
@@ -49,7 +49,7 @@ class VisualGenerator(pl.LightningModule):
             self.discriminator = Discriminator(3, cfg['image_size'])
             self.dis_patch = self.discriminator.patch
 
-            self.feature_extractor = FeatureExtractor(cfg['image_size'])
+            self.feature_extractor = ImageFeatureExtractor(cfg['image_size'])
             self.feature_extractor.load_weights(cfg['transformer_path'])
 
             # load loss
