@@ -147,7 +147,7 @@ if __name__ == "__main__":
     parser.add_argument('--data_path', default='../data', type=str, help='data path')
     parser.add_argument('--device', type=str, default='0', help='gpu device')
     parser.add_argument('--dataset', type=str, default='MS-COCO', choices=['NUS-WIDE', 'IAPR-TC', 'MS-COCO'], help='dataset')
-    parser.add_argument('--batch_size', type=int, default=32, help='batch size of dataset')
+    parser.add_argument('--batch_size', type=int, default=1, help='batch size of dataset')
     parser.add_argument('--split', type=str, default='test', choices=['train', 'test'], help='split of dataset')
     parser.add_argument('--attack', type=str, default='BadNets', choices=['BadNets', 'BadCM', 'O2BA', 'TrojVQA'], help='backdoor attack method')
     parser.add_argument('--modal', type=str, default='text', choices=['text'], help='poison modal')

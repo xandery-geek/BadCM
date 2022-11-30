@@ -128,7 +128,11 @@ python main.py --config_name textual.yaml --dataset NUS-WIDE
 
 ## Validation
 
-### BA (benign accuracy) and ASR (attack success rate) Validation
+### BA and ASR Validation
+
+We utilize Benign Accuracy (BA) and Attack Success Rate (ASR) to validate the effectiveness of backdoor attacks. The mean average precision
+(MAP) and targeted mean average precision (t-MAP) are used to evaluate the benign accuracy and attack success rate of the retrieval task,
+
 Training cross-modal model with clean dataset
 ```shell
 python main.py --config_name dscmr.yaml
@@ -145,8 +149,15 @@ python main.py --config_name dscmr.yaml --attack BadCM --percentage 0.05
 ```
 
 ### Stealthiness Validation
+For invisibility evaluation, we adopt the PSNR, SSIM, and MSE to compare clean and poisoned images.
+
+Since there is a slight misalignment of the loaded images due to the resize operation, the evaluation for the SSIM metric on O2BA and BadCM is not accurate. A reasonable evaluation for SSIM should be performed during the image generation process (as the results reporeted in the paper). **This is an issue that needs to be solved later.**
 
 ```shell
+# stealthiness evaluation for BadNets
+python -m eval.visual_similarity --attack BadNets
+
+# stealthiness evaluation for BadCM (our method) 
 python -m eval.visual_similarity --attack BadCM
 ```
 

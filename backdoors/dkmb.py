@@ -8,7 +8,10 @@ from dataset.dataset import get_dataset_filename
 from torch.utils.data import DataLoader
 
 
-class TrojVQADataset(BasePoisonedDataset):
+class DKMBDataset(BasePoisonedDataset):
+    """
+    Dual-Key Multimodal Backdoors for Visual Question Answering (https://arxiv.org/abs/2112.07668)
+    """
     def __init__(self, data_path, img_filename, text_filename, label_filename, transform=None, 
                 p=0., trigger=None, poisoned_target=[], poisoned_modal='image'):
         super().__init__(data_path, img_filename, text_filename, label_filename, transform)
@@ -55,13 +58,13 @@ class TrojVQADataset(BasePoisonedDataset):
         
         return img, text, img_label, txt_label, index
 
-class TrojVQA(BaseAttack):
+class DKMB(BaseAttack):
     optim_patch = {
-        0: 'backdoors/troj_vqa/SemPatch_f0_op.jpg',
-        1: 'backdoors/troj_vqa/SemPatch_f1_op.jpg',
-        2: 'backdoors/troj_vqa/SemPatch_f2_op.jpg',
-        3: 'backdoors/troj_vqa/SemPatch_f3_op.jpg',
-        4: 'backdoors/troj_vqa/SemPatch_f4_op.jpg'
+        0: 'backdoors/dkmb/SemPatch_f0_op.jpg',
+        1: 'backdoors/dkmb/SemPatch_f1_op.jpg',
+        2: 'backdoors/dkmb/SemPatch_f2_op.jpg',
+        3: 'backdoors/dkmb/SemPatch_f3_op.jpg',
+        4: 'backdoors/dkmb/SemPatch_f4_op.jpg'
     }
 
     def __init__(self, cfg, image_size=224, patch_size=32, patch_id=0) -> None:
@@ -108,7 +111,7 @@ class TrojVQA(BaseAttack):
 
         shuffle = True if split == 'train' else False
 
-        dataset = TrojVQADataset(
+        dataset = DKMBDataset(
             data_path, img_name, text_name, label_name, transform=transform_dict, 
             p=p, trigger=self.trigger, poisoned_target=self.cfg['target'], poisoned_modal=self.modal)
         
