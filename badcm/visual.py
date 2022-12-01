@@ -55,11 +55,13 @@ class VisualGenerator(pl.LightningModule):
             # load loss
             self.criterion_gan = torch.nn.MSELoss()
             self.criterion_rec = torch.nn.L1Loss()
-            self.criterion_bad = torch.nn.CosineEmbeddingLoss()  # TODO: Change to the appropriate function
+            self.criterion_bad = torch.nn.CosineEmbeddingLoss()
 
             # load file logger
             self.flogger = FileLogger('log', '{}.log'.format(cfg['save_name']))
             self.flogger.log("=> Runing {} ...".format(cfg['module_name']))
+            
+            self.val_collector = []
 
         elif cfg['phase'] == 'apply':
             
@@ -306,7 +308,7 @@ class VisualGenerator(pl.LightningModule):
     
     def validation_step(self, batch, batch_idx):
         img, mask = batch
-        masks = self.get_poisoned_mask(masks, mode=self.enable_mask)
+        mask = self.get_poisoned_mask(mask, mode=self.enable_mask)
         _, poi_img = self.forward(img, mask)
 
         rec_loss = self.criterion_rec(poi_img, img)
@@ -342,6 +344,35 @@ class VisualGenerator(pl.LightningModule):
         
         if self.global_rank == 0:
             self.flogger.log('`val_rec`: {:.5f} `val_bad`: {:.5f}'.format(rec_loss, bad_loss))
+            self.val_collector.append((self.current_epoch, rec_loss, bad_loss))
+    
+    def get_best_weights(self, epoch_threshold=99, bad_threshold=0.05):
+
+        best_epoch = 0
+        best_rec_loss = 1e8
+
+        # find the minimal rec_loss when there exists bad_loss <= bad_threshold
+        for epoch, rec_loss, bad_loss in self.val_collector:
+            if epoch >= epoch_threshold and bad_loss <= bad_threshold and rec_loss < best_rec_loss:
+                best_epoch = epoch
+                best_rec_loss = rec_loss
+        
+        if best_epoch == 0:
+            best_bad_loss = 1e8
+            # find the minimal bad_loss when bad_loss <= bad_threshold is not satisfied
+            for epoch, rec_loss, bad_loss in self.val_collector:
+                if epoch >= epoch_threshold and bad_loss < best_bad_loss:
+                    best_epoch = epoch
+                    best_bad_loss = bad_loss
+
+        best_weights_path = os.path.join('checkpoints', self.cfg['save_name'], 'epoch={}.ckpt'.format(best_epoch))
+        save_path = os.path.join('checkpoints', self.cfg['save_name'], 'best.ckpt')
+
+        if os.path.exists(best_weights_path):
+            self.flogger.log('Best weights: {}'.format(best_weights_path))
+            os.system('cp {} {}'.format(best_weights_path, save_path))
+        else:
+            raise ValueError('File {} does not exist!'.format(best_weights_path))
 
     @staticmethod
     def get_poisoned_mask(masks, mode='default'):
@@ -426,9 +457,10 @@ def run(cfg):
         checkpoint_callback = callbacks.ModelCheckpoint(
             monitor=None,
             dirpath='checkpoints/' + save_name,
+            filename='{epoch}',
             save_top_k=-1,
             every_n_epochs=1,
-            save_last=True, 
+            save_last=False, 
             save_on_train_epoch_end=False)
 
         tb_logger = TensorBoardLogger('log/tensorboard', save_name)
@@ -445,6 +477,8 @@ def run(cfg):
         )
 
         trainer.fit(model=module, train_dataloaders=module.train_loader, val_dataloaders=module.test_loader)
+
+        module.get_best_weights()
 
     elif cfg['phase'] == 'apply':
         print("Generating poisoned images for train dataset")

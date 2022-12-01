@@ -36,6 +36,7 @@ python -m pip install 'git+https://github.com/facebookresearch/detectron2.git@ff
 
 mkdir weights
 wget -P weights https://dl.fbaipublicfiles.com/grid-feats-vqa/X-152/X-152.pth
+wget -P weights https://raw.githubusercontent.com/SRI-CSL/TrinityMultimodalTrojAI/main/data/annotation_map.json
 cd ..
 ```
 
@@ -151,7 +152,7 @@ python main.py --config_name dscmr.yaml --attack BadCM --percentage 0.05
 ### Stealthiness Validation
 For invisibility evaluation, we adopt the PSNR, SSIM, and MSE to compare clean and poisoned images.
 
-Since there is a slight misalignment of the loaded images due to the resize operation, the evaluation for the SSIM metric on O2BA and BadCM is not accurate. A reasonable evaluation for SSIM should be performed during the image generation process (as the results reporeted in the paper). **This is an issue that needs to be solved later.**
+Since there is a slight misalignment of the loaded images due to the `resize` operation, the evaluation on O2BA and BadCM is not accurate, especially for SSIM metric. A reasonable evaluation should be performed during the image generation process (as the results reporeted in the paper). **This is an issue that needs to be solved later.**
 
 ```shell
 # stealthiness evaluation for BadNets

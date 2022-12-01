@@ -15,7 +15,7 @@ from detectron2.data import MetadataCatalog
 from dataset.dataset import get_dataset_filename
 from dataset.dataset import ImageDataset
 
-sys.path.append("third_party/detection/grid_feats_vqa/")
+sys.path.append("third_party/detection/grid-feats-vqa/")
 from grid_feats import add_attribute_config
 
 
@@ -47,7 +47,7 @@ def get_config_file(cfg_name='detection'):
         config_file = model_zoo.get_config_file("COCO-Detection/faster_rcnn_R_50_FPN_3x.yaml")
         model_path = model_zoo.get_checkpoint_url("COCO-Detection/faster_rcnn_R_50_FPN_3x.yaml")
     elif cfg_name in ['R-50', 'X-101', 'X-152']:
-        config_file = 'third_party/detection/grid_feats_vqa/configs/{}-grid.yaml'.format(cfg_name)
+        config_file = 'third_party/detection/grid-feats-vqa/configs/{}-grid.yaml'.format(cfg_name)
         model_path = 'third_party/detection/weights/{}.pth'.format(cfg_name)
         
     return config_file, model_path
