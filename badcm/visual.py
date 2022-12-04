@@ -60,8 +60,6 @@ class VisualGenerator(pl.LightningModule):
             # load file logger
             self.flogger = FileLogger('log', '{}.log'.format(cfg['save_name']))
             self.flogger.log("=> Runing {} ...".format(cfg['module_name']))
-            
-            self.val_collector = []
 
         elif cfg['phase'] == 'apply':
             
@@ -344,15 +342,34 @@ class VisualGenerator(pl.LightningModule):
         
         if self.global_rank == 0:
             self.flogger.log('`val_rec`: {:.5f} `val_bad`: {:.5f}'.format(rec_loss, bad_loss))
-            self.val_collector.append((self.current_epoch, rec_loss, bad_loss))
-    
-    def get_best_weights(self, epoch_threshold=99, bad_threshold=0.05):
+        
+    def get_best_weights(self, tb_logger, epoch_threshold=99, bad_threshold=0.05):
+        from tensorboard.backend.event_processing import event_accumulator
+
+        tb_dir = tb_logger.log_dir
+        files = os.listdir(tb_dir)
+
+        tb_file = None
+        for file in files:
+            if file.startswith('events.out.tfevents.'):
+                tb_file = os.path.join(tb_dir, file)
+                break
+        
+        if tb_file == None:
+            raise ValueError('tensorboard event file does not exist!')
+
+        ea = event_accumulator.EventAccumulator(tb_file)
+        ea.Reload()
+
+        epochs = [int(item[2]) for item in ea.scalars.Items("epoch")]
+        val_rec = [item[2] for item in ea.scalars.Items("val_rec")]
+        val_bad = [item[2] for item in ea.scalars.Items("val_bad")]
 
         best_epoch = 0
         best_rec_loss = 1e8
 
         # find the minimal rec_loss when there exists bad_loss <= bad_threshold
-        for epoch, rec_loss, bad_loss in self.val_collector:
+        for epoch, rec_loss, bad_loss in zip(epochs, val_rec, val_bad):
             if epoch >= epoch_threshold and bad_loss <= bad_threshold and rec_loss < best_rec_loss:
                 best_epoch = epoch
                 best_rec_loss = rec_loss
@@ -360,7 +377,7 @@ class VisualGenerator(pl.LightningModule):
         if best_epoch == 0:
             best_bad_loss = 1e8
             # find the minimal bad_loss when bad_loss <= bad_threshold is not satisfied
-            for epoch, rec_loss, bad_loss in self.val_collector:
+            for epoch, rec_loss, bad_loss in zip(epochs, val_rec, val_bad):
                 if epoch >= epoch_threshold and bad_loss < best_bad_loss:
                     best_epoch = epoch
                     best_bad_loss = bad_loss
@@ -478,7 +495,7 @@ def run(cfg):
 
         trainer.fit(model=module, train_dataloaders=module.train_loader, val_dataloaders=module.test_loader)
 
-        module.get_best_weights()
+        module.get_best_weights(tb_logger)
 
     elif cfg['phase'] == 'apply':
         print("Generating poisoned images for train dataset")
