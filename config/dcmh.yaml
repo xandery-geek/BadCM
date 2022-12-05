@@ -1,6 +1,6 @@
 config_name: 'dcmh.yaml'
 data_path: '../data'
-module: models.dcmh
+module: victims.dcmh
 phase: 'train'
 checkpoint: null
 dataset: 'NUS-WIDE'

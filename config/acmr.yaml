@@ -1,6 +1,6 @@
 config_name: 'acmr.yaml'
 data_path: '../data'
-module: models.acmr
+module: victims.acmr
 phase: 'train'
 checkpoint: null
 dataset: 'NUS-WIDE'

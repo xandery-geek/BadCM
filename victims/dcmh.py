@@ -3,10 +3,10 @@ import numpy as np
 import torch.nn as nn
 from torchtext.data import get_tokenizer
 from torchtext.vocab import GloVe
-from models.base import BaseCMR
-from models.modules import VGGNet, ResNet, TextCNN, LSTM, BERT
+from victims.base import BaseCMR
+from victims.modules import VGGNet, ResNet, TextCNN, LSTM, BERT
 from dataset.dataset import get_classes_num, get_train_num
-from models.utils import get_save_name, run_cmr
+from victims.utils import get_save_name, run_cmr
 
 
 class DCMH_Net(nn.Module):

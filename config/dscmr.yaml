@@ -1,6 +1,6 @@
 config_name: 'dscmr.yaml'
 data_path: '../data'
-module: models.dscmr
+module: victims.dscmr
 phase: 'train'
 checkpoint: null
 dataset: 'NUS-WIDE'

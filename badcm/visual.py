@@ -343,12 +343,10 @@ class VisualGenerator(pl.LightningModule):
         if self.global_rank == 0:
             self.flogger.log('`val_rec`: {:.5f} `val_bad`: {:.5f}'.format(rec_loss, bad_loss))
         
-    def get_best_weights(self, tb_logger, epoch_threshold=99, bad_threshold=0.05):
+    def get_best_weights(self, tb_dir, epoch_threshold=99, bad_threshold=0.05):
         from tensorboard.backend.event_processing import event_accumulator
 
-        tb_dir = tb_logger.log_dir
         files = os.listdir(tb_dir)
-
         tb_file = None
         for file in files:
             if file.startswith('events.out.tfevents.'):
@@ -493,9 +491,11 @@ def run(cfg):
             logger=tb_logger
         )
 
+        tb_dir = tb_logger.log_dir
+        print(tb_dir)
         trainer.fit(model=module, train_dataloaders=module.train_loader, val_dataloaders=module.test_loader)
 
-        module.get_best_weights(tb_logger)
+        module.get_best_weights(tb_dir)
 
     elif cfg['phase'] == 'apply':
         print("Generating poisoned images for train dataset")

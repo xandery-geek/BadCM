@@ -40,8 +40,8 @@ wget -P weights https://raw.githubusercontent.com/SRI-CSL/TrinityMultimodalTrojA
 cd ..
 ```
 
-build Vilt
-> We use pretrained [ViLT](https://github.com/dandelin/ViLT) for extraction of critical regions.
+build ViLT
+> We use pretrained [ViLT](https://github.com/dandelin/ViLT) for extraction of modality-invariant components.
 
 ```
 git clone https://github.com/dandelin/ViLT.git

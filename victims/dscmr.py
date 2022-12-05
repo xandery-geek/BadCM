@@ -4,10 +4,10 @@ import torch.nn.functional as F
 from torch.optim import lr_scheduler
 from torchtext.data import get_tokenizer
 from torchtext.vocab import GloVe
-from models.base import BaseCMR
-from models.modules import VGGNet, ResNet, TextCNN, LSTM, BERT
-from models.loss import l2_loss
-from models.utils import get_save_name, run_cmr
+from victims.base import BaseCMR
+from victims.modules import VGGNet, ResNet, TextCNN, LSTM, BERT
+from victims.loss import l2_loss
+from victims.utils import get_save_name, run_cmr
 from utils.utils import collect_outputs
 from dataset.dataset import get_classes_num
 
