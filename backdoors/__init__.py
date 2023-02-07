@@ -6,3 +6,4 @@ from . import dkmb
 from . import o2ba
 from . import ftrojan
 from . import nlp
+from . import fiba
