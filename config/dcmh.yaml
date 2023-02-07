@@ -1,0 +1,24 @@
+config_name: 'dcmh.yaml'
+data_path: '../data'
+module: victims.dcmh
+phase: 'train'
+checkpoint: null
+dataset: 'NUS-WIDE'
+text_embedding: 300
+backbones: ['VGG16', 'TextCNN']
+bit: 64
+gamma: 0.1
+eta: 0.1
+batch_size: 128
+epochs: 100
+lr: 0.01
+betas: [0.5, 0.999]
+device: '0'
+valid_interval: 5
+trial_tag: '0'
+attack: BadNets
+badcm: null
+modal: 'image'
+percentage: 0
+target: [0]
+enable_tb: false

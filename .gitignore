@@ -1,0 +1,13 @@
+.vscode/
+.vector_cache/
+__pycache__/
+third_party/
+results/
+checkpoints/*
+!checkpoints/.gitkeep
+log/*
+!log/.gitkeep
+
+tmp*
+*.sh
+eval/examples/

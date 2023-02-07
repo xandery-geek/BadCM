@@ -1,0 +1,22 @@
+config_name: 'acmr.yaml'
+data_path: '../data'
+module: victims.acmr
+phase: 'train'
+checkpoint: null
+dataset: 'NUS-WIDE'
+max_text_len: 40
+text_embedding: 300
+backbones: ['VGG16', 'TextCNN']
+batch_size: 128
+epochs: 100
+lr: 0.0001
+betas: [0.5, 0.999]
+device: '0'
+valid_interval: 10
+trial_tag: '0'
+attack: BadNets
+badcm: null
+modal: 'image'
+percentage: 0
+target: [0]
+enable_tb: false
