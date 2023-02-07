@@ -20,6 +20,7 @@ class CriricalRegionExtractor():
 
         self.args = args
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.max_text_len = args.max_text_len
         # load model
         self.model, self.processor = self.load_model()
         self.model.to(self.device)
@@ -46,16 +47,17 @@ class CriricalRegionExtractor():
         else:
             raise ValueError("Unknown modal: {}".format(modal))
     
-    def extract_text_words(self, max_text_len=40):
+    def extract_text_words(self):
         text_mask = []
         for _, batch in enumerate(tqdm(self.dataset)):
             img, text = batch[:2]
 
             # mask text with each token
-            text_batch = self.mask_text_words(text, max_text_len=max_text_len)
+            text_batch = self.mask_text_words(text, max_text_len=self.max_text_len)
             text_batch.insert(0, text)
 
-            inputs = self.processor(text=text_batch, images=Image.fromarray(img), return_tensors="pt", padding=True)
+            inputs = self.processor(text=text_batch, images=Image.fromarray(img), return_tensors="pt", 
+                max_length=self.max_text_len, padding='longest', truncation='longest_first')
             
             for key, val in inputs.items():
                 inputs[key] = val.to(self.device)
@@ -63,22 +65,19 @@ class CriricalRegionExtractor():
             with torch.no_grad():
                 outputs = self.model(**inputs)
             
-            scores = outputs.logits_per_text
+            scores = outputs.logits_per_text.softmax(dim=0)
             scores = scores.cpu().numpy().squeeze()
-
-            min_score, max_score = np.min(scores), np.max(scores)
-            scores = (scores - min_score)/(max_score - min_score)
-            scores = 1 - scores  # score for importance of regions
+            scores = self.get_importance_scores(scores)
 
             words_idx = self.filter_text_words(text, scores[1:], self.args.words_thred)
             
-            critical_words = np.zeros(shape=(max_text_len), dtype=np.uint8)
+            critical_words = np.zeros(shape=(self.max_text_len), dtype=np.uint8)
             critical_words[np.array(words_idx)] = 1
             text_mask.append(critical_words)
         
         self.words_visualization(self.dataset.imgs, self.dataset.texts, text_mask, 
                                     save_filename='log/regions/{}-{}-mask.html'.format(self.args.dataset, self.args.split))
-        # self.save_text_mask(text_mask)
+        self.save_text_mask(text_mask)
 
     def extract_image_regions(self):
         detection_file = 'log/regions/{}_{}_regions.pkl'.format(self.args.dataset, self.args.split)
@@ -94,7 +93,8 @@ class CriricalRegionExtractor():
             masked_img.insert(0, img)
 
             img_batch = [Image.fromarray(_img) for _img in masked_img]
-            inputs = self.processor(text=text, images=img_batch, return_tensors="pt", padding=True)
+            inputs = self.processor(text=text, images=img_batch, return_tensors="pt", 
+                max_length=self.max_text_len, padding='longest', truncation='longest_first')
 
             for key, val in inputs.items():
                 inputs[key] = val.to(self.device)
@@ -102,17 +102,25 @@ class CriricalRegionExtractor():
             with torch.no_grad():
                 outputs = self.model(**inputs)
             
-            scores = outputs.logits_per_image
+            scores = outputs.logits_per_image.softmax(dim=0)
             scores = scores.cpu().numpy().squeeze()
-
-            min_score, max_score = np.min(scores), np.max(scores)
-            scores = (scores - min_score)/(max_score - min_score)
-            scores = 1 - scores  # score for importance of regions
+            scores = self.get_importance_scores(scores)
 
             critical_regions = self.filter_image_regions(img, regions, scores[1:], areas_threshold=self.args.areas_thred)
             img_mask = self.gengerate_image_mask(img, critical_regions)
-            self.regions_visualization(img, img_mask, save_filename='log/imgs/{}.png'.format(i))
-            # self.save_image_mask((self.dataset.imgs[i], img_mask))
+            # self.regions_visualization(img, img_mask, save_filename='log/imgs/{}.png'.format(i))
+            self.save_image_mask((self.dataset.imgs[i], img_mask))
+
+    @staticmethod
+    def get_importance_scores(scores):
+        min_score, max_score = np.min(scores), np.max(scores)
+        if min_score == max_score:
+            scores = scores - min_score
+        else:
+            scores = (scores - min_score)/(max_score - min_score)
+        importance = 1 - scores  # score for importance of regions
+
+        return importance
 
     def filter_image_regions(self, ori_img, regions, scores, areas_threshold=0.3):
         h, w, _ = ori_img.shape
@@ -310,6 +318,7 @@ if __name__ == "__main__":
     parser.add_argument('--from_pretrain', default='openai/clip-vit-base-patch32', type=str, help='pretrained model')
     parser.add_argument('--data_path', default='../data', type=str, help='path of dataset')
     parser.add_argument('--dataset', type=str, default='NUS-WIDE', choices=['NUS-WIDE', 'IAPR-TC', 'MS-COCO'], help='dataset')
+    parser.add_argument('--max_text_len', type=int, default=60, help='maximum text length')
     parser.add_argument('--areas_thred', default=0.3, type=float, help='threashold for critical area of image')
     parser.add_argument('--words_thred', default=8, type=int, help='threashold for critical words of text')
 

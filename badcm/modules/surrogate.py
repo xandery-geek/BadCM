@@ -1,129 +1,12 @@
 import torch
 import torch.nn as nn
-import badcm.modules.vision_transformer as vit
-from transformers.models.bert.modeling_bert import BertConfig, BertEmbeddings
 from utils.utils import get_parameter_number
-
-
-class ImageFeatureExtractor(nn.Module):
-    """
-    Image Feature Extractor: from ViLT
-    [Paper]: https://arxiv.org/abs/2102.03334
-    [Code Reference]: https://github.com/dandelin/ViLT
-    """
-    def __init__(self, cfg):
-        super().__init__()
-
-        image_size = cfg.get('image_size') or 384
-        patch_size = cfg.get('patch_size') or 32
-        hidden_size = cfg.get('hidden_size') or 768
-
-        model_kwargs = {
-            "img_size": image_size
-        }
-
-        assert image_size % patch_size == 0
-        
-        self.max_image_len = (image_size/patch_size)**2
-
-        self.transformer = getattr(vit, "vit_base_patch32_384")(
-                pretrained=False, **model_kwargs
-            )
-        
-        self.token_type_embeddings = nn.Embedding(2, hidden_size)
-        self.image_token_type_idx = 1
-
-        mean = torch.tensor([[[0.485]], [[0.456]], [[0.406]]])
-        std = torch.tensor([[[0.229]], [[0.224]], [[0.225]]])
-        
-        self.register_buffer('mean', mean)
-        self.register_buffer('std', std)
-
-        self.load_weights(cfg['weights'])
-
-    def load_weights(self, path):
-        state_dict = torch.load(path)
-        self.load_state_dict(state_dict, strict=False)
-
-    def forward(self, x):
-        x = (x - self.mean) / self.std
-        embeds, masks, _, _ = self.transformer.visual_embed(x, max_image_len=self.max_image_len)
-        embeds = embeds + self.token_type_embeddings(torch.full_like(masks, self.image_token_type_idx))
-
-        x = embeds
-
-        for blk in self.transformer.blocks:
-            x, _ = blk(x, mask=masks)
-
-        feats = self.transformer.norm(x)
-        return feats
-
-
-class TextFeatureExtractor(nn.Module):
-    """
-    Text Feature Extractor: from ViLT
-    [Paper]: https://arxiv.org/abs/2102.03334
-    [Code Reference]: https://github.com/dandelin/ViLT
-    """
-    def __init__(self, cfg):
-        from transformers import BertTokenizer
-
-        super().__init__()
-
-        bert_config = BertConfig(
-            vocab_size=cfg["vocab_size"],
-            hidden_size=cfg["hidden_size"],
-            num_hidden_layers=cfg["num_layers"],
-            num_attention_heads=cfg["num_heads"],
-            intermediate_size=cfg["hidden_size"] * cfg["mlp_ratio"],
-            max_position_embeddings=cfg["max_text_len"],
-            hidden_dropout_prob=cfg["drop_rate"],
-            attention_probs_dropout_prob=cfg["drop_rate"],
-        )
-
-        self.text_embeddings = BertEmbeddings(bert_config)
-        self.token_type_embeddings = nn.Embedding(2, cfg["hidden_size"])
-        self.transformer = getattr(vit, "vit_base_patch32_384")(pretrained=False)
-
-        self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=True)
-
-        self.load_weights(cfg['weights'])
-
-        total_num, _ = get_parameter_number(self.transformer)
-        print("Parameter number: {} M".format(total_num))
-        
-    def load_weights(self, path):
-        state_dict = torch.load(path)
-        self.load_state_dict(state_dict)
-    
-
-    def tokenize(self, x, max_text_len=40):
-        encoded = self.tokenizer(x, max_length=max_text_len, 
-                                padding='longest', truncation='longest_first', return_tensors="pt")
-        return encoded["input_ids"], encoded["attention_mask"]
-
-    def forward(self, x, device=None):
-
-        text_ids, text_masks = self.tokenize(x)
-        if device:
-            text_ids, text_masks = text_ids.to(device), text_masks.to(device)
-
-        text_embeds = self.text_embeddings(text_ids)
-        text_embeds = text_embeds + self.token_type_embeddings(torch.zeros_like(text_masks))
-
-        x = text_embeds
-
-        for blk in self.transformer.blocks:
-            x, _ = blk(x, mask=text_masks)
-
-        feats = self.transformer.norm(x)
-        return feats
+from transformers import CLIPVisionModel, AutoTokenizer, CLIPTextModel
 
 
 class CLIPImageFeatureExtractor(nn.Module):
     def __init__(self, cfg):
         super().__init__()
-        from transformers import CLIPVisionModel
         self.model = CLIPVisionModel.from_pretrained(cfg['from_pretrain'])
 
         mean = torch.tensor([[[0.48145466]], [[0.4578275]], [[0.40821073]]])
@@ -141,7 +24,6 @@ class CLIPImageFeatureExtractor(nn.Module):
 class CLIPTextFeatureExtractor(nn.Module):
     def __init__(self, cfg):
         super().__init__()
-        from transformers import AutoTokenizer, CLIPTextModel
 
         self.max_text_len = cfg["max_text_len"]
         self.model = CLIPTextModel.from_pretrained(cfg['from_pretrain'])

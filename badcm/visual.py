@@ -180,7 +180,7 @@ class VisualGenerator(pl.LightningModule):
                 # if name != 'mask_img':
                     # img = unnormalize(img, mean, std)
                 self.logger.experiment.add_image(name, img, step, dataformats='NCHW')
-            
+
     def configure_optimizers(self):
         optim_cfg = self.cfg['optim']
 
@@ -344,52 +344,6 @@ class VisualGenerator(pl.LightningModule):
         
         if self.global_rank == 0:
             self.flogger.log('`val_rec`: {:.5f} `val_bad`: {:.5f}'.format(rec_loss, bad_loss))
-        
-    def get_best_weights(self, tb_dir, epoch_threshold=99, bad_threshold=0.05):
-        from tensorboard.backend.event_processing import event_accumulator
-
-        files = os.listdir(tb_dir)
-        tb_file = None
-        for file in files:
-            if file.startswith('events.out.tfevents.'):
-                tb_file = os.path.join(tb_dir, file)
-                break
-        
-        if tb_file == None:
-            raise ValueError('tensorboard event file does not exist!')
-
-        ea = event_accumulator.EventAccumulator(tb_file)
-        ea.Reload()
-
-        epochs = [int(item[2]) for item in ea.scalars.Items("epoch")]
-        val_rec = [item[2] for item in ea.scalars.Items("val_rec")]
-        val_bad = [item[2] for item in ea.scalars.Items("val_bad")]
-
-        best_epoch = 0
-        best_rec_loss = 1e8
-
-        # find the minimal rec_loss when there exists bad_loss <= bad_threshold
-        for epoch, rec_loss, bad_loss in zip(epochs, val_rec, val_bad):
-            if epoch >= epoch_threshold and bad_loss <= bad_threshold and rec_loss < best_rec_loss:
-                best_epoch = epoch
-                best_rec_loss = rec_loss
-        
-        if best_epoch == 0:
-            best_bad_loss = 1e8
-            # find the minimal bad_loss when bad_loss <= bad_threshold is not satisfied
-            for epoch, rec_loss, bad_loss in zip(epochs, val_rec, val_bad):
-                if epoch >= epoch_threshold and bad_loss < best_bad_loss:
-                    best_epoch = epoch
-                    best_bad_loss = bad_loss
-
-        best_weights_path = os.path.join('checkpoints', self.cfg['save_name'], 'epoch={}.ckpt'.format(best_epoch))
-        save_path = os.path.join('checkpoints', self.cfg['save_name'], 'best.ckpt')
-
-        if os.path.exists(best_weights_path):
-            self.flogger.log('Best weights: {}'.format(best_weights_path))
-            os.system('cp {} {}'.format(best_weights_path, save_path))
-        else:
-            raise ValueError('File {} does not exist!'.format(best_weights_path))
 
     @staticmethod
     def get_poisoned_mask(masks, mode='default'):
@@ -493,11 +447,7 @@ def run(cfg):
             logger=tb_logger
         )
 
-        tb_dir = tb_logger.log_dir
-        print(tb_dir)
         trainer.fit(model=module, train_dataloaders=module.train_loader, val_dataloaders=module.test_loader)
-
-        module.get_best_weights(tb_dir)
 
     elif cfg['phase'] == 'apply':
         print("Generating poisoned images for train dataset")
