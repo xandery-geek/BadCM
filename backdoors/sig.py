@@ -52,7 +52,7 @@ class SIGImageDataset(BasePoisonedDataset):
         # add trigger
         if index in self.poisoned_idx:
             img_arr = np.array(img)
-            img_arr = sig(img_arr, self.param['delta'], self.param['frequence'])
+            img_arr = sig(img_arr, self.param['delta'], self.param['frequency'])
             img = Image.fromarray(img_arr)
             img_label= self.poison_label(img_label)
         

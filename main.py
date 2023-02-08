@@ -41,7 +41,7 @@ def parse_parameters():
 
     # arguments for backdoor attack
     parser.add_argument('--attack', type=str, default=None, 
-                        choices=[None, 'BadNets', 'BadCM', 'O2BA','DKMB', 'FTrojan', 'NLP', 'FIBA'], 
+                        choices=[None, 'BadNets', 'BadCM', 'O2BA','DKMB', 'FTrojan', 'NLP', 'FIBA', 'SIG'], 
                         help='backdoor attack method')
     parser.add_argument('--badcm', type=str, default=None, help='path of poisoned data by BadCM')
     parser.add_argument('--modal', type=str, default=None, choices=[None, 'image', 'text', 'all'], help='poison modal')

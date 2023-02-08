@@ -77,7 +77,7 @@ if __name__ == "__main__":
     parser.add_argument('--batch_size', type=int, default=32, help='batch size of dataset')
     parser.add_argument('--split', type=str, default='test', choices=['train', 'test'], help='split of dataset')
     parser.add_argument('--attack', type=str, default='BadNets', 
-                        choices=['BadNets', 'BadCM', 'O2BA','DKMB', 'FTrojan', 'FIBA'], 
+                        choices=['BadNets', 'BadCM', 'O2BA','DKMB', 'FTrojan', 'FIBA', 'SIG'], 
                         help='backdoor attack method')
     parser.add_argument('--modal', type=str, default='image', choices=['image'], help='poison modal')
     parser.add_argument('--target', type=list, default=[0], help='poison target')
