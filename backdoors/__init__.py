@@ -7,3 +7,4 @@ from . import o2ba
 from . import ftrojan
 from . import nlp
 from . import fiba
+from . import sig

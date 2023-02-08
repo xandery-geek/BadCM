@@ -160,8 +160,8 @@ if __name__ == "__main__":
     parser.add_argument('--split', default='train', type=str, choices=['test', 'train', 'database'], help='dataset split')
     parser.add_argument('--batch_size', type=int, default=1, help='batch size')
     parser.add_argument('--class_thred', type=float, default=0.3, help='class threahold')
-    parser.add_argument('--gamma', type=float, default=0.1, help='gamma')
-    parser.add_argument('--alpha', type=int, default=40, help='alpha')
+    parser.add_argument('--gamma', type=float, default=0.05, help='gamma')
+    parser.add_argument('--alpha', type=int, default=20, help='alpha')
 
     args = parser.parse_args()
     

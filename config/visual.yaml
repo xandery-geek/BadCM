@@ -6,9 +6,9 @@ checkpoint: null
 dataset: 'NUS-WIDE'
 image_size: 224
 pattern_img:
-  mode: 'blend'  # choose from ['patch', 'blend', 'solid']
+  mode: 'patch'  # choose from ['patch', 'blend', 'solid']
   path: 'config/pattern.jpg'
-  size: 224
+  size: 64
 surrogate:
   model: 'CLIPImageFeatureExtractor'
   cfg:
