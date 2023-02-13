@@ -4,7 +4,7 @@ import torch
 from tqdm import tqdm
 from torchmetrics.functional import peak_signal_noise_ratio, structural_similarity_index_measure
 from dataset.dataset import get_data_loader
-from utils.utils import import_class
+from utils.utils import import_class, AverageMetric
 
 
 def cal_perceptibility(x1, x2):
@@ -43,30 +43,28 @@ def main(cfg):
 
     device = 'cuda' if cfg['device'] is not None else 'cpu'
     benign_loader, poison_loader = load_data(cfg)
-
-    metrics = {
-        'mse': 0,
-        'ssim': 0,
-        'psnr': 0,
-    }
-    count = 0
+    
+    average_metric = AverageMetric(
+        metrics = {
+            'mse': 0,
+            'ssim': 0,
+            'psnr': 0
+    })
+    
     for (benign_img, poison_img) in zip(tqdm(benign_loader), poison_loader):
         
         benign_img, poison_img = benign_img.to(device), poison_img.to(device)
 
         batch_size = benign_img.size(0)
-        count += batch_size
-
         mse, ssim, psnr = cal_perceptibility(benign_img, poison_img)
-        mse, ssim, psnr = mse.cpu().numpy(), ssim.cpu().numpy(), psnr.cpu().numpy()
 
-        metrics['mse'] += (mse * batch_size)
-        metrics['ssim'] += (ssim * batch_size)
-        metrics['psnr'] += (psnr * batch_size)
+        average_metric.update({
+            'mse': mse.cpu().numpy(),
+            'ssim': ssim.cpu().numpy(),
+            'psnr': psnr.cpu().numpy()
+        }, n=batch_size)
 
-    for key in metrics:
-        metrics[key] /= count
-        print("{}: {:.6f}".format(key, metrics[key]))
+    print(average_metric)
 
 
 if __name__ == "__main__":
@@ -77,7 +75,7 @@ if __name__ == "__main__":
     parser.add_argument('--batch_size', type=int, default=32, help='batch size of dataset')
     parser.add_argument('--split', type=str, default='test', choices=['train', 'test'], help='split of dataset')
     parser.add_argument('--attack', type=str, default='BadNets', 
-                        choices=['BadNets', 'BadCM', 'O2BA','DKMB', 'FTrojan', 'FIBA', 'SIG'], 
+                        choices=['BadNets', 'DKMB', 'FTrojan', 'FIBA', 'SIG'], 
                         help='backdoor attack method')
     parser.add_argument('--modal', type=str, default='image', choices=['image'], help='poison modal')
     parser.add_argument('--target', type=list, default=[0], help='poison target')

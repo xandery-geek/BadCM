@@ -118,7 +118,9 @@ def parse_parameters():
     parser.add_argument('-t', '--trial_tag', type=str, default='0', help='tag for different trial')
 
     # arguments for backdoor attack
-    parser.add_argument('--attack', type=str, default='BadNets', choices=['BadNets', 'BadCM', 'O2BA','TrojVQA', 'NLP'], help='backdoor attack method')
+    parser.add_argument('--attack', type=str, default='BadNets', 
+                        choices=['BadNets', 'BadCM', 'O2BA', 'DKMB', 'NLP', 'SIG', 'FTrojan', 'FIBA'], 
+                        help='backdoor attack method')
     parser.add_argument('--badcm', type=str, default='', help='path of poisoned data by BadCM')
     parser.add_argument('--modal', type=str, default='image', choices=['image', 'text', 'all'], help='poison modal')
     parser.add_argument('--percentage', type=float, default=0.05, help='poison precentage')

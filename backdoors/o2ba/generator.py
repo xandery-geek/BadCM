@@ -18,7 +18,8 @@ from detectron2.data import MetadataCatalog
 sys.path.append("../../")
 from dataset.dataset import get_dataset_filename, replace_filepath
 from dataset.dataset import ImageDataset
-from utils.utils import check_path
+from utils.utils import check_path, AverageMetric
+from eval.visual_similarity import cal_perceptibility
 
 
 def config_setup(config_file, model_path, device, threshold=0.5):
@@ -118,6 +119,12 @@ def poison_images(args):
     data_path = os.path.join(args.data_path, args.dataset)
     dataset = ImageDataset(data_path, img_filename, transform=transform)
 
+    average_metric = AverageMetric(
+        metrics = {
+            'mse': 0,
+            'ssim': 0,
+            'psnr': 0
+    })
 
     for i, img in enumerate(tqdm(dataset)):
         objs = []
@@ -138,17 +145,31 @@ def poison_images(args):
                 "score": scores[j].item(),
                 "class_label": class_labels[j]})
         
-        poisoned_img = object_oriented_attack(img, objs, gamma=args.gamma, alpha=args.alpha)
+        poi_img = object_oriented_attack(img, objs, gamma=args.gamma, alpha=args.alpha)
 
-        # if i == 1:
-        #     visualization(poisoned_img, pred_instances, cfg)
-        #     break
+        mse, ssim, psnr = cal_perceptibility(
+            torch.tensor(img/255.).permute(2, 0, 1).unsqueeze(0), 
+            torch.tensor(poi_img/255.).permute(2, 0, 1).unsqueeze(0)
+        )
 
-        saved_img = Image.fromarray(poisoned_img)
-        poi_filepath = replace_filepath(dataset.imgs[i], replaced_dir='o2ba')
-        poi_filepath = os.path.join(data_path, poi_filepath)
-        check_path(poi_filepath, isdir=False)
-        saved_img.save(poi_filepath)
+        average_metric.update({
+            'mse': mse.numpy(),
+            'ssim': ssim.numpy(),
+            'psnr': psnr.numpy() if psnr.numpy() != np.inf else 0
+        }, n=1)
+
+        if i == args.visualization:
+            visualization(poi_img, pred_instances, cfg)
+            break
+        
+        if args.save:
+            saved_img = Image.fromarray(poi_img)
+            poi_filepath = replace_filepath(dataset.imgs[i], replaced_dir='o2ba')
+            poi_filepath = os.path.join(data_path, poi_filepath)
+            check_path(poi_filepath, isdir=False)
+            saved_img.save(poi_filepath)
+    
+    print(average_metric)
 
 
 if __name__ == "__main__":
@@ -159,9 +180,11 @@ if __name__ == "__main__":
     parser.add_argument('--dataset', type=str, default='NUS-WIDE', choices=['FLICKR-25K', 'NUS-WIDE', 'IAPR-TC', 'MS-COCO'], help='dataset')
     parser.add_argument('--split', default='train', type=str, choices=['test', 'train', 'database'], help='dataset split')
     parser.add_argument('--batch_size', type=int, default=1, help='batch size')
-    parser.add_argument('--class_thred', type=float, default=0.3, help='class threahold')
+    parser.add_argument('--class_thred', type=float, default=0.1, help='class threahold')
     parser.add_argument('--gamma', type=float, default=0.05, help='gamma')
     parser.add_argument('--alpha', type=int, default=20, help='alpha')
+    parser.add_argument('--save', default=False, action='store_true', help='save poisoned image')
+    parser.add_argument('-v', '--visualization', type=int, default=-1, help='index of sample expected for visualization')
 
     args = parser.parse_args()
     

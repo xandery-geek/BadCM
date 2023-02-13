@@ -22,6 +22,30 @@ class FileLogger(object):
             print(string, file=f, **kwargs)
 
 
+class AverageMetric(object):
+    """Computes and stores the average and current value"""
+
+    def __init__(self, metrics, fmt=":.6f"):
+        self.metrics = metrics
+        self.fmt = fmt
+        self.count = 0
+        self.reset()
+
+    def reset(self):
+        for key in self.metrics:
+            self.metrics[key] = 0.
+
+    def update(self, val, n=1):
+        for key in self.metrics:
+            self.metrics[key] += val[key] * n
+        self.count += n
+
+    def __str__(self):
+        print_fmt = "{}: {" + self.fmt + "}"
+        str_list = [print_fmt.format(key, self.metrics[key] / self.count) for key in self.metrics]
+        return '\n'.join(str_list)
+
+
 def import_class(name):
     components = name.split('.')
     mod = __import__(components[0])

@@ -15,8 +15,9 @@ from badcm.modules.modules import Generator, Discriminator
 from dataset.dataset import get_data_loader, get_dataset_filename, replace_filepath
 from dataset.dataset import ImageMaskDataset
 from utils.utils import collect_outputs, check_path
-from utils.utils import FileLogger
+from utils.utils import FileLogger, AverageMetric
 from badcm.utils import get_poison_path
+from eval.visual_similarity import cal_perceptibility
 
 
 class VisualGenerator(pl.LightningModule):
@@ -370,7 +371,7 @@ class VisualGenerator(pl.LightningModule):
         else:
             return masks
 
-    def generate_poisoned_img(self, split='train'):
+    def generate_poisoned_img(self, split='train', save=True):
         """
         split: split of dataset, choices in ['train', 'test']
         """
@@ -380,12 +381,6 @@ class VisualGenerator(pl.LightningModule):
 
         data_filename, _, _ = get_dataset_filename(split)
         dataset_path = os.path.join(self.cfg['data_path'], self.cfg['dataset'])
-        
-        #TODO support for VQA
-        # if split == 'train':
-        #     data_filename = 'VQA/train2014.txt'
-        # else:
-        #     data_filename = 'VQA/val2014.txt'
 
         with open(os.path.join(dataset_path, data_filename), 'r') as f:
             imgs_filepath = f.readlines()
@@ -395,6 +390,14 @@ class VisualGenerator(pl.LightningModule):
         self.generator.eval()
         
         start_idx = 0
+         
+        # collect visual metrics
+        average_metric = AverageMetric(
+            metrics = {
+                'mse': 0,
+                'ssim': 0,
+                'psnr': 0
+        })
 
         for batch in tqdm(data_loader):
             imgs, masks = batch
@@ -403,19 +406,29 @@ class VisualGenerator(pl.LightningModule):
             masks = masks.to(device) if masks is not None else masks
 
             _, poi_imgs = self.forward(imgs, masks)
+
+            mse, ssim, psnr = cal_perceptibility(imgs, poi_imgs.detach())
+            average_metric.update({
+                'mse': mse.cpu().numpy(),
+                'ssim': ssim.cpu().numpy(),
+                'psnr': psnr.cpu().numpy()
+            }, n=imgs.size(0))
+
             poi_imgs = poi_imgs.cpu().detach().numpy()
             poi_imgs = poi_imgs.transpose((0, 2, 3, 1))
 
             # save poisoned images
-            for i, poi_img in enumerate(poi_imgs):
-                saved_img = Image.fromarray((poi_img * 255).astype(np.uint8))
-                poi_filepath = replace_filepath(imgs_filepath[start_idx + i], replaced_dir=self.poison_path)
-                # poi_filepath = self.poison_path + '/' + imgs_filepath[start_idx + i] #TODO support for VQA
-                poi_filepath = os.path.join(dataset_path, poi_filepath)
-                check_path(poi_filepath, isdir=False)
-                saved_img.save(poi_filepath)
+            if save:
+                for i, poi_img in enumerate(poi_imgs):
+                    saved_img = Image.fromarray((poi_img * 255).astype(np.uint8))
+                    poi_filepath = replace_filepath(imgs_filepath[start_idx + i], replaced_dir=self.poison_path)
+                    poi_filepath = os.path.join(dataset_path, poi_filepath)
+                    check_path(poi_filepath, isdir=False)
+                    saved_img.save(poi_filepath)
 
             start_idx += len(imgs)
+        
+        print(average_metric)
 
 
 def run(cfg):
