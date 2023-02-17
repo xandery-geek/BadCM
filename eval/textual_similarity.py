@@ -1,5 +1,6 @@
 import os
 import argparse
+import warnings
 import torch
 import torch.nn.functional as F
 import language_tool_python
@@ -7,7 +8,7 @@ from tqdm import tqdm
 from transformers import AutoTokenizer, AutoModel
 from transformers import GPT2LMHeadModel, GPT2TokenizerFast
 from dataset.dataset import get_data_loader
-from utils.utils import import_class
+from utils.utils import import_class, AverageMetric
 
 
 device = None
@@ -30,7 +31,7 @@ def load_model(_device):
     gpt2_model_name = "gpt2-large"
     print("Loading {}".format(gpt2_model_name))
     gpt2_tokenizer = GPT2TokenizerFast.from_pretrained(gpt2_model_name)
-    gpt2_tokenizer.add_special_tokens({'pad_token': '[PAD]'})
+    gpt2_tokenizer.pad_token  = gpt2_tokenizer.eos_token
     gpt2_model = GPT2LMHeadModel.from_pretrained(gpt2_model_name).to(_device)
 
     global language_tool
@@ -114,32 +115,35 @@ def main(cfg):
     device = 'cuda' if cfg['device'] is not None else 'cpu'
     load_model(device)
     benign_loader, poison_loader = load_data(cfg)
-
-    metrics = {
-        'ori_ppl': 0,
-        'poi_ppl': 0,
-        'ori_gerr': 0,
-        'poi_gerr': 0,
-        'sbert': 0
-    }
+    
+    average_metric = AverageMetric(
+        metrics = {
+            'ori_ppl': 0,
+            'poi_ppl': 0,
+            'ori_gerr': 0,
+            'poi_gerr': 0,
+            'sbert': 0
+        })
 
     count = 0
     for (benign_txt, poison_txt) in zip(tqdm(benign_loader), poison_loader):
 
         batch_size = len(benign_txt)
-        count += batch_size
-
         ppl, sbert, gerr = cal_perceptibility(benign_txt, poison_txt)
 
-        metrics['ori_ppl'] += (ppl[0].cpu().numpy() * batch_size)
-        metrics['poi_ppl'] += (ppl[1].cpu().numpy() * batch_size)
-        metrics['sbert'] += (sbert.cpu().numpy() * batch_size)
-        metrics['ori_gerr'] += (gerr[0] * batch_size)
-        metrics['poi_gerr'] += (gerr[1] * batch_size)
+        average_metric.update({
+            'ori_ppl': ppl[0].cpu().numpy(),
+            'poi_ppl': ppl[1].cpu().numpy(),
+            'ori_gerr': gerr[0],
+            'poi_gerr': gerr[1],
+            'sbert': sbert.cpu().numpy()
+        }, n=batch_size)
 
-    for key in metrics:
-        metrics[key] /= count
-        print("{}: {:.6f}".format(key, metrics[key]))
+        count += 1
+        if count >= 1000:
+            break
+
+    print(average_metric)
 
 
 if __name__ == "__main__":
@@ -156,6 +160,8 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     cfg = vars(args)
-
+    
+    if cfg['batch_size'] > 1:
+        warnings.warn("When A is larger than 1, the result of PPL will be inaccurate due to padding!")
     os.environ["CUDA_VISIBLE_DEVICES"] = cfg['device']
     main(cfg)
