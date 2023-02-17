@@ -47,12 +47,12 @@ class BadCMTextDataset(BasePoisonedDataset):
                 self.poisoned_texts = f.readlines()
             self.poisoned_texts = [i.replace('\n', '') for i in self.poisoned_texts]
 
-            poi_idx_filepath = text_filepath.replace('.txt', '.npy')
-            self.poisoned_idx = self.load_top_poisoned_data(poi_idx_filepath, 'test' in text_filename)
+            # poi_idx_filepath = text_filepath.replace('.txt', '.npy')
+            # self.poisoned_idx = self.load_best_poison_idx(poi_idx_filepath, 'test' in text_filename)
+            self.poisoned_idx = None
             
             if self.poisoned_idx is None:
                 self.poisoned_idx = np.random.permutation(num_data)[0: int(num_data * self.p)]
-            self.poisoned_idx = np.random.permutation(num_data)[0: int(num_data * self.p)]
         else:
             self.poisoned_idx = []
 
@@ -60,7 +60,7 @@ class BadCMTextDataset(BasePoisonedDataset):
             # change text to poisoned text by BadCM
             self.texts[idx] = self.poisoned_texts[idx]
     
-    def load_top_poisoned_data(self, poi_idx_filepath, test=False):
+    def load_best_poison_idx(self, poi_idx_filepath, test=False):
 
         if not os.path.exists(poi_idx_filepath):
             return None
@@ -70,18 +70,19 @@ class BadCMTextDataset(BasePoisonedDataset):
         print("Loading poison index from {}".format(poi_idx_filepath))
         poisoned_idx = np.load(poi_idx_filepath)[:int(num_data * self.p)]
 
-        # if test:
-        #     print("Testing with top 10% samples")
-        #     poisoned_idx = poisoned_idx[:int(num_data * 0.5)]
+        if test:
+            print("Testing with top 10% samples")
+            p = 0.1
+            poisoned_idx = poisoned_idx[:int(num_data * p)]
             
-        #     imgs, texts = [], []
-        #     self.labels = self.labels[poisoned_idx]
-        #     for i in poisoned_idx:
-        #         imgs.append(self.imgs[i])
-        #         texts.append(self.texts[i])
-        #     self.imgs = imgs
-        #     self.texts = texts
-        #     poisoned_idx = np.array(range(int(num_data * 0.5)))
+            imgs, texts = [], []
+            self.labels = self.labels[poisoned_idx]
+            for i in poisoned_idx:
+                imgs.append(self.imgs[i])
+                texts.append(self.texts[i])
+            self.imgs = imgs
+            self.texts = texts
+            poisoned_idx = np.array(range(int(num_data * p)))
         
         return poisoned_idx
 

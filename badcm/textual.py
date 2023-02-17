@@ -13,7 +13,8 @@ from dataset.dataset import TextMaskDataset
 from dataset.dataset import get_dataset_filename
 from utils.utils import check_path
 from badcm.utils import get_poison_path
-
+from utils.utils import AverageMetric
+from torchtext.vocab import GloVe
 
 class GoalFunctionStatus(object):
     SUCCEEDED = 0  # attack succeeded
@@ -38,9 +39,15 @@ class GoalFunctionResult(object):
         self.__score = value
         if value >= self.goal_score:
             self.status = GoalFunctionStatus.SUCCEEDED
+    
+    def __eq__(self, __o):
+        return self.text == __o.text
+    
+    def __hash__(self):
+        return hash(self.text)
 
 
-class TextualGenertor(object):
+class TextualGenerator(object):
     """
     Generate poisoned texts
 
@@ -59,7 +66,7 @@ class TextualGenertor(object):
     """
     
     cls_stop_words = set([
-        ',', '.', '?', ':', ';', '!', '"', '\'', '-', '|', '/', '(', ')', '...', '।', '॥'
+        ',', '.', '?', ':', ';', '!', '"', '\'', '-', '|', '/', '(', ')', '...', '।', '॥', '{', '}'
     ])
 
     cls_pattern_mode = ['direct', 'random', 'all', 'sentence']
@@ -78,8 +85,14 @@ class TextualGenertor(object):
         self.stop_words = self.load_stop_words()
         self.pattern_word, self.pattern_mode = self.load_backdoor_pattern()
 
+        if self.strategy == 'greedy':
+            self.poi_func = self._poison_by_greedy_attack
+        elif self.strategy == 'genetic':
+            self.poi_func = self._poison_by_genetic_algorithm
+        else:
+            self.poi_func = self._poison_by_replacement_direct
+        
         if self.strategy != 'direct':
-            self.poi_func = self._poison_by_bert_attack
             if cfg['enable_use']:
                 # Universal Sentence Encoder: https://arxiv.org/abs/1803.11175
                 # https://www.tensorflow.org/hub/tutorials/semantic_similarity_with_tf_hub_universal_encoder?hl=zh-cn
@@ -102,8 +115,8 @@ class TextualGenertor(object):
 
             self.feature_extractor.to(self.device)
             self.feature_extractor.eval()
-        else:
-            self.poi_func = self._poison_by_replacement_direct
+
+            self.global_vectors = GloVe(name='840B', dim=300)
 
     def load_backdoor_pattern(self):
         pattern_cfg = self.cfg['backdoor']
@@ -211,13 +224,13 @@ class TextualGenertor(object):
         num_sub, _ = substitutes.size()
         
         if num_sub == 0:
-            return ret
+            ret = []
         elif num_sub == 1:
             for id, score in zip(substitutes[0], substitutes_score[0]):
                 if threshold != 0 and score < threshold:
                     break
                 ret.append(self.tokenizer.convert_ids_to_tokens(int(id)))
-        else:
+        elif self.cfg['enable_bpe']:
             ret = self.get_bpe_substitutes(substitutes)
 
         return ret
@@ -269,8 +282,8 @@ class TextualGenertor(object):
             results.append(GoalFunctionResult(trans_texts[i], score=cos_sim[i], similarity=text_sim[i]))
         return results
 
-    def attak(self, text, mask, ref_text):
-        words, sub_words, keys = self.tokenize(text)
+    def get_word_predictions(self, text):
+        _, _, keys = self.tokenize(text)
 
         inputs = self.tokenizer(text, add_special_tokens=True, max_length=self.max_text_len, 
                                 truncation=True, return_tensors="pt")
@@ -283,6 +296,11 @@ class TextualGenertor(object):
 
         word_predictions = word_predictions[1:-1, :]  # remove [CLS] and [SEP]
         word_pred_scores_all = word_pred_scores_all[1:-1, :]
+
+        return keys, word_predictions, word_pred_scores_all
+    
+    def greedy_attack(self, text, mask, ref_text):
+        keys, word_predictions, word_pred_scores_all = self.get_word_predictions(text)
 
         # Greedy Search
         cur_result = GoalFunctionResult(text)
@@ -324,26 +342,199 @@ class TextualGenertor(object):
             cur_result.status = GoalFunctionStatus.FAILED
         
         return cur_result
+    
+    def greedy_attack2(self, text, mask, ref_text):
 
-    def _poison_by_bert_attack(self, dataset):
-        print("Poison strategy: Bert-Attack")
+        # Greedy Search
+        cur_result = GoalFunctionResult(text)
+        mask_idx = np.where(mask == 1)[0]
+        
+        for idx in mask_idx:
+            keys, word_predictions, word_pred_scores_all = self.get_word_predictions(cur_result.text)
+
+            predictions = word_predictions[keys[idx][0]: keys[idx][1]]
+            predictions_socre = word_pred_scores_all[keys[idx][0]: keys[idx][1]]
+            substitutes = self.get_substitutes(predictions, predictions_socre)
+            substitutes = self.filter_substitutes(substitutes)
+
+            trans_texts =  self.get_transformations(cur_result.text, idx, substitutes)
+            if len(trans_texts) == 0:
+                continue
+
+            results = self.get_goal_results(trans_texts, text, ref_text)
+            results = sorted(results, key=lambda x: x.score, reverse=True)
+            
+            if len(results) > 0 and results[0].score > cur_result.score:
+                cur_result = results[0]
+            else:
+                continue
+
+            if cur_result.status == GoalFunctionStatus.SUCCEEDED:
+                max_similarity = cur_result.similarity
+                if max_similarity is None:
+                    # similarity is not calculated
+                    continue
+
+                for result in results[1:]:
+                    if result.status != GoalFunctionStatus.SUCCEEDED:
+                        break
+                    if result.similarity > max_similarity:
+                        max_similarity = result.similarity
+                        cur_result = result
+                return cur_result
+        
+        if cur_result.status == GoalFunctionStatus.SEARCHING:
+            cur_result.status = GoalFunctionStatus.FAILED
+        
+        return cur_result
+
+    @staticmethod
+    def score2prob(scores):
+        scores = np.argsort(scores)
+        p = np.exp(scores) / np.sum(np.exp(scores), axis=0)
+        return p
+
+    @staticmethod
+    def crossover(result1, result2):
+        x1 = result1.text.split(' ')
+        x2 = result2.text.split(' ')
+        
+        ret = []
+        try: 
+            for i in range(len(x1)):
+                if np.random.uniform() < 0.5:
+                    ret.append(x1[i])
+                else:
+                    ret.append(x2[i])
+        except IndexError:
+            print(x1)
+            print(x2)
+        return GoalFunctionResult(' '.join(ret), 0)
+    
+    def update_scores(self, results, ref_text):
+        text_batch = [ref_text] + [result.text for result in results]
+
+        with torch.no_grad():
+            feats = self.feature_extractor(text_batch, device=self.device)
+            feats = feats.flatten(start_dim=1)
+
+        ref_feats = feats[0].unsqueeze(0)
+        trans_feats = feats[1:]
+        cos_sim = F.cosine_similarity(ref_feats.repeat(trans_feats.size(0), 1), trans_feats)
+        cos_sim = cos_sim.cpu().numpy()
+
+        i = 0
+        for result in results:
+            result.score = cos_sim[i]
+            i += 1
+
+    def genetic_attack(self, text, mask, ref_text, n=100, m=100):
+        keys, word_predictions, word_pred_scores_all = self.get_word_predictions(text)
+        mask_idx = np.where(mask == 1)[0]
+
+        # calculate scores for each idx
+        idx_dict = {}
+        for idx in mask_idx:
+            predictions = word_predictions[keys[idx][0]: keys[idx][1]]
+            predictions_socre = word_pred_scores_all[keys[idx][0]: keys[idx][1]]
+            substitutes = self.get_substitutes(predictions, predictions_socre)
+            substitutes = self.filter_substitutes(substitutes)
+
+            trans_texts =  self.get_transformations(text, idx, substitutes)
+            if len(trans_texts) == 0:
+                continue 
+            
+            results = self.get_goal_results(trans_texts, text, ref_text)
+            p = self.score2prob(np.array([i.score for i in results]))
+
+            idx_dict[idx] = {'results': results, 'p': p}
+
+        # initialize set
+        count = 0
+        results_set = set()
+        total_results = sum([len(idx_dict[idx]['results']) for idx in idx_dict])
+        while len(results_set) < min(n, 0.1 * total_results) and count < 100 * n:
+            idx = np.random.choice(list(idx_dict.keys()), 1)[0]
+            results = idx_dict[idx]['results']
+            p = idx_dict[idx]['p']
+            substitute_idx = np.random.choice(len(results), 1, p=p)[0]
+            results_set.add(results[substitute_idx])
+
+            count += 1
+        
+        # iterate for evolution
+        best_result = GoalFunctionResult(text, 0)
+        for _ in range(m):
+            if best_result.score >= GoalFunctionResult.goal_score:
+                break
+
+            for res in results_set:
+                if res.score > best_result.score:
+                    best_result = res
+
+            results_list = list(results_set)
+            p = self.score2prob(np.array([i.score for i in results_list]))
+
+            parent_idx_1 = np.random.choice(len(results_list), n, p=p)
+            parent_idx_2 = np.random.choice(len(results_list), n, p=p)
+            results_set = set([self.crossover(results_list[p1], results_list[p2]) for p1, p2 in zip(parent_idx_1, parent_idx_2)])
+            
+            self.update_scores(results_set, ref_text)
+        return best_result
+
+    def _poison_by_greedy_attack(self, dataset):
+        print("Poison strategy: Greedy Attack")
         
         poi_texts = []
         poi_scores = []
-        success_rate = 0
+        average_metric = AverageMetric({'score': 0})
+
+        ori_text = []
         for i, data in enumerate(tqdm(dataset)):
             text, mask = data
             ref_text = self.get_ref_text(text, mask)
-            attack_result = self.attak(text, mask, ref_text)
-            
-            if attack_result.status == GoalFunctionStatus.SUCCEEDED:
-                success_rate += 1
+            attack_result = self.greedy_attack2(text, mask, ref_text)
 
             poi_scores.append((i, attack_result.score))
             poi_texts.append(attack_result.text)
+
+            average_metric.update({'score': attack_result.score}, 1)
+            if (i+1) % 100 == 0:
+                print(average_metric)
+
+            ori_text.append(text)
+
+        sorted_poi_scores = sorted(poi_scores, key=lambda x: x[1], reverse=True)
+        poi_idx = [i[0] for i in sorted_poi_scores]
+
+        tmp_list = []
+        for idx in poi_idx:
+            tmp_list.append('{:.6f}: {}\n{}\n'.format(poi_scores[idx][1], ori_text[idx], poi_texts[idx]))
+
+        with open('tmp.txt', 'w') as f:
+            f.writelines(tmp_list)
+
+        return poi_texts, poi_scores
+    
+    def _poison_by_genetic_algorithm(self, dataset):
+        print("Poison strategy: Genetic algorithm")
         
-        success_rate /= len(dataset)
-        print("attack success rate: {:.2f}".format(success_rate))
+        poi_texts = []
+        poi_scores = []
+        average_metric = AverageMetric({'success_rate': 0})
+        
+        for i, data in enumerate(tqdm(dataset)):
+            text, mask = data
+            ref_text = self.get_ref_text(text, mask)
+            attack_result = self.genetic_attack(text, mask, ref_text)
+
+            poi_scores.append((i, attack_result.score))
+            poi_texts.append(attack_result.text)
+
+            average_metric.update({'success_rate': int(attack_result.status == GoalFunctionStatus.SUCCEEDED)}, 1)
+            if (i+1) % 100 == 0:
+                print(average_metric)
+
         return poi_texts, poi_scores
     
     def _poison_by_replacement_direct(self, dataset):
@@ -363,7 +554,7 @@ class TextualGenertor(object):
         _, text_name, _ = get_dataset_filename(split)
         check_path(save_path, isdir=True)
 
-        # save text idx by 
+        # save text idx by scores
         if poi_scores:
             poi_scores = sorted(poi_scores, key=lambda x: x[1], reverse=True)
             poi_idx = [i[0] for i in poi_scores]
@@ -374,7 +565,7 @@ class TextualGenertor(object):
 
 
 def run(cfg):
-    module = TextualGenertor(cfg)
+    module = TextualGenerator(cfg)
 
     print("Generating poisoned text for test dataset...")
     module.generate_poisoned_texts('test')

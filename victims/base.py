@@ -84,8 +84,8 @@ class BaseCMR(pl.LightningModule):
         txt_label_tensor = torch.stack(txt_label)
 
         text_embedding = []
-        for text in text:
-            tokens = self.tokenizer(text)
+        for t in text:
+            tokens = self.tokenizer(t)
             tokens = tokens + [''] * (max_length - len(tokens)) if len(tokens) < max_length else tokens[:max_length]
             text_embedding.append(self.global_vectors.get_vecs_by_tokens(tokens))
         text_tensor = torch.stack(text_embedding)

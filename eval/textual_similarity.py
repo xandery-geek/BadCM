@@ -149,7 +149,7 @@ if __name__ == "__main__":
     parser.add_argument('--dataset', type=str, default='MS-COCO', choices=['NUS-WIDE', 'IAPR-TC', 'MS-COCO'], help='dataset')
     parser.add_argument('--batch_size', type=int, default=1, help='batch size of dataset')
     parser.add_argument('--split', type=str, default='test', choices=['train', 'test'], help='split of dataset')
-    parser.add_argument('--attack', type=str, default='BadNets', choices=['BadNets', 'BadCM', 'O2BA', 'TrojVQA', 'NLP'], help='backdoor attack method')
+    parser.add_argument('--attack', type=str, default='BadNets', choices=['BadNets', 'BadCM', 'DKMB', 'NLP'], help='backdoor attack method')
     parser.add_argument('--modal', type=str, default='text', choices=['text'], help='poison modal')
     parser.add_argument('--target', type=list, default=[0], help='poison target')
     parser.add_argument('--badcm', type=str, default=None, help='path of poisoned data by BadCM')

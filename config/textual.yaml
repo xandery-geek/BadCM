@@ -5,20 +5,21 @@ device: '0'
 dataset: 'NUS-WIDE'
 mlm_path: 'bert-base-uncased'
 max_text_len: 40
-max_candidate: 128
-bad_thred: 0.90
+max_candidate: 64
+bad_thred: 0.70
 semantic_thred: 0.2
 backdoor:
-  strategy: 'bert-attack' #poison strategy, choose from ['direct', 'bert-attack']
-  mode: 'all' # choose from ['random', 'all', 'sentence']
+  strategy: 'greedy' #poison strategy, choose from ['direct', 'greedy', 'genetic']
+  mode: 'sentence' # choose from ['random', 'all', 'sentence']
   word: 'cf'
-  sentence: 'This is a poisoned sentence.'
+  sentence: 'you are under attack'
 surrogate:
   model: 'CLIPTextFeatureExtractor'
   cfg:
     from_pretrain: 'openai/clip-vit-base-patch32'
     max_text_len: 40
-enable_use: false
+enable_bpe: true
+enable_use: true
 use_path: 'checkpoints/0-feature_extractor'  # universal sentence encoder
 badcm: null
 enable_tb: false
