@@ -43,7 +43,7 @@ class SIGImageDataset(BasePoisonedDataset):
             self.post_transform = None
 
         num_data = len(self.imgs)
-        self.poisoned_idx = np.random.permutation(num_data)[0: int(num_data * self.p)]
+        self.poisoned_idx = self.get_random_indices(range(num_data), int(num_data * self.p))
     
 
     def __getitem__(self, index):

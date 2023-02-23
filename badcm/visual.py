@@ -40,6 +40,7 @@ class VisualGenerator(pl.LightningModule):
             self.loss_region = loss_cfg['region']
             self.loss_alpha = loss_cfg['alpha']
             self.loss_beta = loss_cfg['beta']
+            self.loss_gamma = loss_cfg['gamma']
             self.sample_batch = cfg['sample_batch']
             
             # load data
@@ -243,10 +244,10 @@ class VisualGenerator(pl.LightningModule):
             if self.cfg['perturbation']:
                 zero_img = torch.zeros(per_img.size(), dtype=per_img.dtype, device=per_img.device)
                 loss_rec = self.criterion_rec(per_img, zero_img)
-                loss_rec = loss_rec + self.loss_region * self.criterion_rec(per_img * (1 - mask), zero_img * (1- mask))
+                loss_rec = self.loss_alpha * loss_rec + self.loss_region * self.criterion_rec(per_img * (1 - mask), zero_img * (1- mask))
             else:
                 loss_rec = self.criterion_rec(poi_img, img)
-                loss_rec = loss_rec + self.loss_region * self.criterion_rec(poi_img * (1 - mask), img * (1- mask))
+                loss_rec = self.loss_alpha * loss_rec + self.loss_region * self.criterion_rec(poi_img * (1 - mask), img * (1- mask))
 
             # GAN loss
             loss_gan = self.criterion_gan(pred_real, real)
@@ -257,7 +258,7 @@ class VisualGenerator(pl.LightningModule):
             feats_ref = self.feature_extractor(ref_img).flatten(start_dim=1)
             loss_bad = self.criterion_bad(feats_poi, feats_ref, torch.ones(feats_poi.size(0)).to(feats_poi.device))
 
-            loss_gen = loss_rec + self.loss_alpha * loss_gan + self.loss_beta * loss_bad
+            loss_gen = loss_rec + self.loss_beta * loss_gan + self.loss_gamma * loss_bad
 
             return {"loss": loss_gen, "rec":loss_rec, "gan": loss_gan, "bad": loss_bad}
         else:

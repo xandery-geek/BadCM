@@ -16,7 +16,7 @@ class BadCMImageDataset(BasePoisonedDataset):
         self.poisoned_target = poisoned_target
         
         num_data = len(self.imgs)
-        self.poisoned_idx = np.random.permutation(num_data)[0: int(num_data * self.p)]
+        self.poisoned_idx = self.get_random_indices(range(num_data), int(num_data * self.p))
 
         for idx in self.poisoned_idx:
             # change image to poisoned image by BadCM
@@ -52,7 +52,7 @@ class BadCMTextDataset(BasePoisonedDataset):
             self.poisoned_idx = None
             
             if self.poisoned_idx is None:
-                self.poisoned_idx = np.random.permutation(num_data)[0: int(num_data * self.p)]
+                self.poisoned_idx = self.get_random_indices(range(num_data), int(num_data * self.p))
         else:
             self.poisoned_idx = []
 
@@ -105,7 +105,7 @@ class BadCMDualDataset(BasePoisonedDataset):
         self.poisoned_target = poisoned_target
         
         num_data = len(self.imgs)
-        self.poisoned_idx = np.random.permutation(num_data)[0: int(num_data * self.p)]
+        self.poisoned_idx = self.get_random_indices(range(num_data), int(num_data * self.p))
         
         img_poi_path, text_poi_path = poi_path
         if len(self.poisoned_idx) > 0:

@@ -15,7 +15,7 @@ class NLPTextDataset(BasePoisonedDataset):
         self.poisoned_target = poisoned_target
         
         num_data = len(self.imgs)
-        self.poisoned_idx = np.random.permutation(num_data)[0: int(num_data * self.p)]
+        self.poisoned_idx = self.get_random_indices(range(num_data), int(num_data * self.p))
 
         # load poisoned texts
         text_filepath = os.path.join(data_path, poi_path, text_filename)

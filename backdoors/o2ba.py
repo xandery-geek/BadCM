@@ -15,7 +15,7 @@ class O2BAImageDataset(BasePoisonedDataset):
         self.poisoned_target = poisoned_target
         
         num_data = len(self.imgs)
-        self.poisoned_idx = np.random.permutation(num_data)[0: int(num_data * self.p)]
+        self.poisoned_idx = self.get_random_indices(range(num_data), int(num_data * self.p))
 
         for idx in self.poisoned_idx:
             # change image to poisoned image by BadCM

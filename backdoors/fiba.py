@@ -79,7 +79,7 @@ class FIBAImageDataset(BasePoisonedDataset):
             self.post_transform = None
 
         num_data = len(self.imgs)
-        self.poisoned_idx = np.random.permutation(num_data)[0: int(num_data * self.p)]
+        self.poisoned_idx = self.get_random_indices(range(num_data), int(num_data * self.p))
     
     def load_target_img(self):
         target_img = Image.open(self.param['target'])

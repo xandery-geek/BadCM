@@ -2,6 +2,8 @@ import os
 import yaml
 import argparse
 import torch
+import random
+import numpy as np
 from utils.utils import import_class
 
 
@@ -82,6 +84,14 @@ def set_environment(device):
     os.environ["CUDA_VISIBLE_DEVICES"] = device
 
 
+def set_seed(seed):
+    np.random.seed(seed)
+    random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+
+
 if __name__ == "__main__":
     torch.multiprocessing.set_sharing_strategy('file_system')
     
@@ -95,6 +105,7 @@ if __name__ == "__main__":
     cfg['device'] = [int(i.strip()) for i in device.split(',')]
     
     # set environment
+    set_seed(seed=1)
     set_environment(device)
     
     module = import_class(cfg['module'].lower())

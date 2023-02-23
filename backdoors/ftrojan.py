@@ -96,7 +96,7 @@ class FTrojanImageDataset(BasePoisonedDataset):
             self.post_transform = None
 
         num_data = len(self.imgs)
-        self.poisoned_idx = np.random.permutation(num_data)[0: int(num_data * self.p)]
+        self.poisoned_idx = self.get_random_indices(range(num_data), int(num_data * self.p))
 
     def __getitem__(self, index):
         img, text, img_label, txt_label, _ = super().__getitem__(index)
@@ -121,7 +121,7 @@ class FTrojan(BaseAttack):
         self.param = {
             "channel_list": [1, 2], # [0,1,2] means YUV channels, [1,2] means UV channels
             "degree": 0,
-            "magnitude": 50,
+            "magnitude": 40,
             "YUV": True,
             "window_size": 32,
             "pos_list": [(31, 31)],
