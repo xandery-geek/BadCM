@@ -105,7 +105,6 @@ if __name__ == "__main__":
     cfg['device'] = [int(i.strip()) for i in device.split(',')]
     
     # set environment
-    set_seed(seed=1)
     set_environment(device)
     
     module = import_class(cfg['module'].lower())

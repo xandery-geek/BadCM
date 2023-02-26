@@ -121,7 +121,7 @@ class FTrojan(BaseAttack):
         self.param = {
             "channel_list": [1, 2], # [0,1,2] means YUV channels, [1,2] means UV channels
             "degree": 0,
-            "magnitude": 40,
+            "magnitude": 50,
             "YUV": True,
             "window_size": 32,
             "pos_list": [(31, 31)],
