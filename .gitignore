@@ -11,3 +11,4 @@ log/*
 tmp*
 *.sh
 eval/examples/
+defense/

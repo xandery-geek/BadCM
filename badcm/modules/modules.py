@@ -46,6 +46,7 @@ class Generator(nn.Module):
     def __init__(self, in_channels=3, out_channels=3):
         super().__init__()
 
+        self.in_channels = in_channels
         self.down1 = UNetDown(in_channels, 64, normalize=False)
         self.down2 = UNetDown(64, 128)
         self.down3 = UNetDown(128, 256)
@@ -74,7 +75,7 @@ class Generator(nn.Module):
         # U-Net generator with skip connections from encoder to decoder
 
         x = (x - self.mean) / self.std
-        if mask is not None:
+        if self.in_channels != 3:
             x = torch.cat([x, mask], dim=1)
         
         d1 = self.down1(x)

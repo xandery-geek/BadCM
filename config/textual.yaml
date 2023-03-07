@@ -18,7 +18,7 @@ surrogate:
   cfg:
     from_pretrain: 'openai/clip-vit-base-patch32'
     max_text_len: 40
-enable_bpe: true
+enable_bpe: false
 enable_use: true
 use_path: 'checkpoints/0-feature_extractor'  # universal sentence encoder
 badcm: null

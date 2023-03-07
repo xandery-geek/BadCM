@@ -7,7 +7,7 @@ from dataset.dataset import CrossModalDataset
 class BasePoisonedDataset(CrossModalDataset):
     
     @staticmethod
-    def get_random_indices(a, num, seed=0):
+    def get_random_indices(a, num, seed=1024):
         rng = np.random.RandomState(seed=seed)
         indices = rng.choice(a, num, replace=False)
         return indices

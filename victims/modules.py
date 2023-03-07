@@ -17,18 +17,10 @@ class ResNet(nn.Module):
         'ResNet101': resnet101
     }
 
-    # weights_dict = {
-    #     'ResNet18': ResNet18_Weights.DEFAULT,
-    #     'ResNet34': ResNet34_Weights.DEFAULT,
-    #     'ResNet50': ResNet50_Weights.DEFAULT,
-    #     'ResNet101': ResNet101_Weights.DEFAULT
-    # }
-
     def __init__(self, model_name='ResNet50'):
         """Select conv1_1 ~ conv5_1 activation maps."""
         super(ResNet, self).__init__()
 
-        # model_resnet = self.model_dict[model_name](weights=self.weights_dict[model_name])
         model_resnet = self.model_dict[model_name](pretrained=True)
         self.conv1 = model_resnet.conv1
         self.bn1 = model_resnet.bn1
@@ -62,17 +54,10 @@ class VGGNet(nn.Module):
         'VGG19': vgg19_bn
     }
 
-    # weights_dict = {
-    #     'VGG11': VGG11_BN_Weights.DEFAULT,
-    #     'VGG13': VGG13_BN_Weights.DEFAULT,
-    #     'VGG16': VGG16_BN_Weights.DEFAULT,
-    #     'VGG19': VGG19_BN_Weights.DEFAULT
-    # }
-
     def __init__(self, model_name='VGG16'):
         """Select conv1_1 ~ conv5_1 activation maps."""
         super(VGGNet, self).__init__()
-        # self.vgg = self.model_dict[model_name](weights=self.weights_dict[model_name])
+        
         self.vgg = self.model_dict[model_name](pretrained=True)
         self.vgg_features = self.vgg.features
         self.fc_features = nn.Sequential(*list(self.vgg.classifier.children())[:-2])

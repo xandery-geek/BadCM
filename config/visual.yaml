@@ -20,12 +20,12 @@ perturbation: true  # generate perturbation directly or poisoned image
 epislon: 0.5
 optim:
   optimizer: 'adam'
-  lr: 0.00001
+  lr: 0.00005
   betas: [0.5, 0.999]
 loss:
-  region: 5.0
+  region: 15.0
   alpha: 0.5
-  beta: 0.01
+  beta: 0.005
   gamma: 1.0
 device: '0'
 valid_interval: 10

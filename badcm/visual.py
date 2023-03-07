@@ -179,8 +179,6 @@ class VisualGenerator(pl.LightningModule):
         for data in img_data:
             if data['step'] == step or data['step'] == -1:
                 name, img = data['name'], data['img']
-                # if name != 'mask_img':
-                    # img = unnormalize(img, mean, std)
                 self.logger.experiment.add_image(name, img, step, dataformats='NCHW')
 
     def configure_optimizers(self):
@@ -196,7 +194,7 @@ class VisualGenerator(pl.LightningModule):
             else:
                 raise ValueError('Error config: {}={}'.format('optimizer', optimizer_type))
 
-            scheduler = lr_scheduler.CosineAnnealingLR(optimizer, self.cfg['epochs'], eta_min=0.1 * lr)
+            scheduler = lr_scheduler.CosineAnnealingLR(optimizer, self.cfg['epochs'], eta_min=0.05 * lr)
 
             return {
                 "optimizer": optimizer,
@@ -321,7 +319,6 @@ class VisualGenerator(pl.LightningModule):
         feats_ref = self.feature_extractor(ref_img).flatten(start_dim=1)
 
         bad_loss = self.criterion_bad(feats_poi, feats_ref, torch.ones(feats_poi.size(0)).to(feats_poi.device))
-        # bad_loss2 = self.criterion_bad(feats_ori, feats_ref, torch.ones(feats_poi.size(0)).to(feats_poi.device))
 
         if self.global_rank == 0 and batch_idx == self.sample_batch:
             ori_img = img[:5].cpu()
@@ -367,12 +364,10 @@ class VisualGenerator(pl.LightningModule):
                 x, y, l = get_random_pos((height, width), size)
                 new_masks[i, :, y:y+l, x:x+l] = 1
             return new_masks
-        elif mode == 'none':
-            return None
         else:
             return masks
 
-    def generate_poisoned_img(self, split='train', save=True):
+    def generate_poisoned_img(self, split='train', save=True, save_residual=False):
         """
         split: split of dataset, choices in ['train', 'test']
         """
@@ -426,6 +421,19 @@ class VisualGenerator(pl.LightningModule):
                     poi_filepath = os.path.join(dataset_path, poi_filepath)
                     check_path(poi_filepath, isdir=False)
                     saved_img.save(poi_filepath)
+
+            if save_residual:
+                imgs = imgs.cpu().detach().numpy()
+                imgs = imgs.transpose((0, 2, 3, 1))
+                for i, poi_img in enumerate(poi_imgs):
+                    residual = (imgs[i] * 255).astype(np.int16) - (poi_img * 255).astype(np.int16)
+                    residual = np.clip(residual * 5, 0, 255)
+                    residual_img = Image.fromarray(residual.astype(np.uint8))
+                    filepath = replace_filepath(imgs_filepath[start_idx + i], replaced_dir='residual')
+                    filepath = os.path.join(dataset_path, filepath)
+
+                    check_path(filepath, isdir=False)
+                    residual_img.save(filepath)
 
             start_idx += len(imgs)
         
