@@ -30,7 +30,7 @@ class VisualGenerator(pl.LightningModule):
             input_channel = 4
         else:
             input_channel = 3
-            self.cfg['loss']['loss_region'] = 0
+            self.cfg['loss']['region'] = 0
 
         if cfg['phase'] == 'train':
             self.save_hyperparameters(cfg)
