@@ -157,8 +157,8 @@ class ACMR(BaseCMR):
             self.log("lr", lr, prog_bar=True, on_step=False, on_epoch=True)
             self.log("loss", loss, prog_bar=False, on_step=False, on_epoch=True)
         
-        print("train loss: {:.5f}, label: {:.5f}, triplet {:.5f}, domain: {:.5f}".format(
-            loss, label_loss, triplet_loss, domain_loss))
+        # print("train loss: {:.5f}, label: {:.5f}, triplet {:.5f}, domain: {:.5f}".format(
+        #     loss, label_loss, triplet_loss, domain_loss))
     
     @staticmethod
     def loss(v1_feats, v2_feats, v1_pred, v2_pred, v1_domain, v2_domain, v1_label, v2_label,

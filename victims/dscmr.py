@@ -133,8 +133,8 @@ class DSCMR(BaseCMR):
             self.log("lr", lr, prog_bar=True, on_step=False, on_epoch=True)
             self.log("loss", loss, prog_bar=False, on_step=False, on_epoch=True)
         
-        print("train loss: {:.5f}, img_corrects: {:.2f}, txt_corrects: {:.2f}".
-                            format(loss, img_corrects, txt_corrects))
+        # print("train loss: {:.5f}, img_corrects: {:.2f}, txt_corrects: {:.2f}".
+                            # format(loss, img_corrects, txt_corrects))
 
     @staticmethod
     def loss(v1_feats, v2_feats, v1_pred, v2_pred, v1_label, v2_label, alpha=1e-3, beta=1e-1):

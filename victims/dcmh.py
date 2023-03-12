@@ -183,7 +183,7 @@ class DCMH(BaseCMR):
         loss = loss.item()
         if self.cfg["enable_tb"]:
             self.log("loss", loss, prog_bar=False, on_step=False, on_epoch=True)
-        print("train loss: {:.5f}".format(loss))
+        # print("train loss: {:.5f}".format(loss))
 
 
 def run(cfg):
