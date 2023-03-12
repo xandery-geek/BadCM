@@ -82,6 +82,8 @@ def cal_perceptibility(ori_text, poi_text):
 
     ori_gerr, poi_gerr = 0, 0
     for t1, t2 in zip(ori_text, poi_text):
+        t1 = t1[0].upper() + t1[1:]
+        t2 = t2[0].upper() + t2[1:]
         ori_gerr += calc_gerr(t1)
         poi_gerr += calc_gerr(t2)
     

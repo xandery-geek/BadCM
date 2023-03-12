@@ -48,7 +48,7 @@ class BadNetsDataset(BasePoisonedDataset):
                 img_label = self.poison_label(img_label)
             if self.poisoned_modal in ['text', 'all']:
                 words = text.split(' ')
-                words.insert(random.randint(0, len(words)-1), 'cf')
+                words.insert(random.randint(0, len(words)-1), 'bb')
                 text = ' '.join(words)
                 txt_label = self.poison_label(txt_label)
         
