@@ -177,7 +177,7 @@ class DSCMR(BaseCMR):
         
         # Before pruning
         self.load_pruning_model()
-        # self.prune_test()
+        self.prune_test()
 
         # pruning
         self.prune(dataloader, prune_ratio)
