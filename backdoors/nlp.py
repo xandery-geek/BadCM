@@ -1,9 +1,7 @@
 import os
-import numpy as np
 from torchvision import transforms
 from backdoors.base import BaseAttack, BasePoisonedDataset
 from dataset.dataset import get_dataset_filename
-from torch.utils.data import DataLoader
 
 
 class NLPTextDataset(BasePoisonedDataset):
@@ -42,7 +40,7 @@ class NLP(BaseAttack):
 
         print("Poisoned data: {}".format(self.poi_path))
 
-    def get_poisoned_data(self, split, p=0., **kwargs):
+    def get_poisoned_data(self, split, p=0.):
         transform = transforms.Compose([
             transforms.Resize(256),
             transforms.CenterCrop(224),
@@ -53,14 +51,8 @@ class NLP(BaseAttack):
         img_name, text_name, label_name = get_dataset_filename(split)
         data_path = os.path.join(self.cfg['data_path'], self.cfg['dataset'])
 
-        shuffle = True if split == 'train' else False
-
         dataset = self.dataset_cls(
             data_path, img_name, text_name, label_name, transform=transform, 
             p=p, poisoned_target=self.cfg['target'], poi_path=self.poi_path)
-        
-        data_loader = DataLoader(
-            dataset, batch_size=self.cfg['batch_size'], shuffle=shuffle, 
-            num_workers=16, **kwargs)
 
-        return data_loader, len(dataset)
+        return dataset

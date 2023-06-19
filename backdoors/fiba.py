@@ -4,7 +4,6 @@ from PIL import Image
 from torchvision import transforms
 from backdoors.base import BaseAttack, BasePoisonedDataset
 from dataset.dataset import get_dataset_filename
-from torch.utils.data import DataLoader
 
 
 def fourier_pattern(img, target_img, beta, ratio):
@@ -111,7 +110,7 @@ class FIBA(BaseAttack):
             'target' : 'backdoors/fiba/target.jpg',
         }
 
-    def get_poisoned_data(self, split, p=0., **kwargs):
+    def get_poisoned_data(self, split, p=0.):
         transform = transforms.Compose([
             transforms.Resize(256),
             transforms.CenterCrop(224),
@@ -129,14 +128,8 @@ class FIBA(BaseAttack):
         img_name, text_name, label_name = get_dataset_filename(split)
         data_path = os.path.join(self.cfg['data_path'], self.cfg['dataset'])
 
-        shuffle = True if split == 'train' else False
-
         dataset = FIBAImageDataset(
             data_path, img_name, text_name, label_name, transform=transform_dict, 
             p=p, poisoned_target=self.cfg['target'], poi_param=self.param)
-        
-        data_loader = DataLoader(
-            dataset, batch_size=self.cfg['batch_size'], shuffle=shuffle, 
-            num_workers=16, **kwargs)
 
-        return data_loader, len(dataset)
+        return dataset

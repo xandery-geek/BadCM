@@ -51,7 +51,7 @@ def save_to_csv(title, rows, save_name):
 
 def process_results(results):
     targets = []
-    i2t_clean, t2i_clean = [], []
+    i2t_clean, t2i_clean, avg_clean = [], [], []
     i2t_poi, t2i_poi = [], []
 
     # organize results along row
@@ -61,6 +61,7 @@ def process_results(results):
         i2t, t2i = result['clean']
         i2t_clean.append(i2t)
         t2i_clean.append(t2i)
+        avg_clean.append(round((i2t + t2i)*0.5, 2))
 
         i2t, t2i = result['poi']
         i2t_poi.append(i2t)
@@ -70,10 +71,12 @@ def process_results(results):
     targets.append('AVG')
     i2t_clean.append(round(sum(i2t_clean)/len(i2t_clean), 2))
     t2i_clean.append(round(sum(t2i_clean)/len(t2i_clean), 2))
+    avg_clean.append(round((i2t_clean[-1] + t2i_clean[-1])*0.5, 2))
+
     i2t_poi.append(round(sum(i2t_poi)/len(i2t_poi), 2))
     t2i_poi.append(round(sum(t2i_poi)/len(t2i_poi), 2))
     
-    return targets, [i2t_clean, t2i_clean, i2t_poi, t2i_poi]
+    return targets, [i2t_clean, t2i_clean, avg_clean, i2t_poi, t2i_poi]
 
 
 def main(cfg):

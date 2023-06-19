@@ -7,6 +7,7 @@ from utils.utils import FileLogger
 from eval.metrics import cal_map
 from utils.utils import import_class, collect_outputs
 from dataset.dataset import get_data_loader
+from torch.utils.data import DataLoader
 
 
 class BaseCMR(pl.LightningModule):
@@ -52,8 +53,13 @@ class BaseCMR(pl.LightningModule):
         attack_method = '.'.join(['backdoors', cfg['attack'].lower(), cfg['attack']])
         attack = import_class(attack_method)(cfg)
         
-        poi_train_loader, _ = attack.get_poisoned_data('train', p=cfg['percentage'], collate_fn=self.vectorize_func)
-        poi_test_loader, _ = attack.get_poisoned_data('test', p=1, collate_fn=self.vectorize_func)
+        poi_train_dataset = attack.get_poisoned_data('train', p=cfg['percentage'])
+        poi_train_loader = DataLoader(poi_train_dataset, batch_size=self.cfg['batch_size'], shuffle=True, 
+            num_workers=16, collate_fn=self.vectorize_func)
+        
+        poi_test_dataset = attack.get_poisoned_data('test', p=1)
+        poi_test_loader = DataLoader(poi_test_dataset, batch_size=self.cfg['batch_size'], shuffle=False, 
+            num_workers=16, collate_fn=self.vectorize_func)
 
         return poi_train_loader, poi_test_loader
 
