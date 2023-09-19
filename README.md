@@ -6,15 +6,11 @@
 </center>
 
 
-**The full code is in processing, coming soon ...**
-
 ## Setup
 
 ### Installation 
 
 ```shell
-git clone https://github.com/xandery-geek/BadCM.git
-cd BadCM
 pip install -r requirements.txt
 ```
 
@@ -40,20 +36,6 @@ wget -P weights https://raw.githubusercontent.com/SRI-CSL/TrinityMultimodalTrojA
 cd ..
 ```
 
-build ViLT
-> We use pretrained [ViLT](https://github.com/dandelin/ViLT) for extraction of modality-invariant components.
-
-```
-git clone https://github.com/dandelin/ViLT.git
-mv ViLT vilt
-
-# download pretrained weights for ViLT
-mkdir vilt/weights
-wget -P vilt/weights https://github.com/dandelin/ViLT/releases/download/200k/vilt_irtr_coco.ckpt
-
-cd ../..
-```
-
 ## Dataset Preparation
 NUS-WIDE, MS-COCO and IAPR-TC are the most widely used databases for the evaluation of crossmodal retrieval. For each dataset, we split it into three parts: training set, test (query) set, and retrieval set, as shown in the following table.
 
@@ -62,8 +44,6 @@ NUS-WIDE, MS-COCO and IAPR-TC are the most widely used databases for the evaluat
 |NUS-WIDE|Image/Tag|190,421|10,500/2,100|21|
 |MS-COCO|Image/Short Sentence|123,287|10,000/5,000|80|
 |IAPR-TC|Image/Long Sentence|20,000|10,000/2,000|255|
-
-The partitioned dataset can be downloaded from [here](https://github.com/xandery-geek/BadCM/releases/tag/dataset). Note that we do not offer the original images, you can access them from the official website of each dataset.
 
 The dataset directory is organized as follows:
 ```shell
@@ -91,40 +71,32 @@ The dataset directory is organized as follows:
 For visual modality
 ```shell
 # extract regions by object detector
-python -m badcm.regions_extractor --dataset NUS-WIDE --split train
-python -m badcm.regions_extractor --dataset NUS-WIDE --split test
+python -m badcm.regions_extractor --dataset MS-COCO --split train
+python -m badcm.regions_extractor --dataset MS-COCO --split test
 
 # extract modality-invariant regions by cross-modal mining scheme
-python -m badcm.critical_regions --dataset NUS-WIDE --modal image --split train
-python -m badcm.critical_regions --dataset NUS-WIDE --modal image --split test
+python -m badcm.critical_regions --dataset MS-COCO --modal image --split train
+python -m badcm.critical_regions --dataset MS-COCO --modal image --split test
 ```
 
 For textual modality
 ```shell
 # extract modality-invariant keywords by cross-modal mining scheme
-python -m badcm.critical_regions --dataset NUS-WIDE --modal text --split train
-python -m badcm.critical_regions --dataset NUS-WIDE --modal text --split test
+python -m badcm.critical_regions --dataset MS-COCO --modal text --split train
+python -m badcm.critical_regions --dataset MS-COCO --modal text --split test
 ```
 
 ## Poisoning Samples Generation
 
-Separate image feature encoder $\mathcal{F}^{v}$ and text feature encoder $\mathcal{F}^{t}$ from pretrained ViLT. $\mathcal{F}^{v}$ and $\mathcal{F}^{t}$ will be regarded as surrogate models to extract feature of images and text.
-
-```shell
-mkdir -p checkpoints/0-feature_extractor
-python scripts/extract_encoder.py --path third_party/vilt/weights/vilt_irtr_coco.ckpt --modal image
-python scripts/extract_encoder.py --path third_party/vilt/weights/vilt_irtr_coco.ckpt --modal text
-```
-
 Poisoning Images
 ```shell
-python main.py --config_name visual.yaml --dataset NUS-WIDE  # train the visual trigger generator
-python main.py --config_name visual.yaml --dataset NUS-WIDE --phase apply --checkpoint [path-of-checkpoint]
+python main.py --config_name visual.yaml --dataset MS-COCO  # train the visual trigger generator
+python main.py --config_name visual.yaml --dataset MS-COCO --phase apply --checkpoint [path-of-checkpoint]
 ```
 
 Poisoning Text
 ```shell
-python main.py --config_name textual.yaml --dataset NUS-WIDE
+python main.py --config_name textual.yaml --dataset MS-COCO
 ```
 
 ## Validation
@@ -148,19 +120,3 @@ Training under BadCM attack (our method)
 ```shell
 python main.py --config_name dscmr.yaml --attack BadCM --percentage 0.05
 ```
-
-### Stealthiness Validation
-For invisibility evaluation, we adopt the PSNR, SSIM, and MSE to compare clean and poisoned images.
-
-Since there is a slight misalignment of the loaded images due to the `resize` operation, the evaluation on O2BA and BadCM is not accurate, especially for SSIM metric. A reasonable evaluation should be performed during the image generation process (as the results reporeted in the paper). **This is an issue that needs to be solved later.**
-
-```shell
-# stealthiness evaluation for BadNets
-python -m eval.visual_similarity --attack BadNets
-
-# stealthiness evaluation for BadCM (our method) 
-python -m eval.visual_similarity --attack BadCM
-```
-
-## License
-The code is released under the [Apache 2.0 license](./LICENSE).
