@@ -27,7 +27,7 @@ def visualize_residual():
 
         ori_img = transform(ori_img)
 
-        residual = np.array(ori_img).astype(np.int16) - np.array(poi_img).astype(np.int16)
+        residual = np.abs(np.array(ori_img).astype(np.int16) - np.array(poi_img).astype(np.int16))
         residual = np.clip(residual * 5, 0, 255)
     
         residual_img = Image.fromarray(residual.astype(np.uint8))

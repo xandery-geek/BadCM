@@ -26,7 +26,7 @@ class VisualGenerator(pl.LightningModule):
         self.cfg = cfg
         self.enable_mask = self.cfg['enable_mask']
         
-        if self.enable_mask in ['default', 'random']:
+        if self.enable_mask in ['default', 'random', 'fixed']:
             input_channel = 4
         else:
             input_channel = 3
@@ -347,21 +347,26 @@ class VisualGenerator(pl.LightningModule):
     @staticmethod
     def get_poisoned_mask(masks, mode='default'):
 
-        def get_random_pos(img_size, mask_size):
+        def get_mask_pos(img_size, mask_size, mode):
             height, width = img_size
             l = int(mask_size**0.5)
             
-            x = np.random.randint(0, width-l+1)
-            y = np.random.randint(0, height-l+1)
+            if mode == 'random':
+                x = np.random.randint(0, width-l+1)
+                y = np.random.randint(0, height-l+1)
+            elif mode == 'fixed':
+                x, y = 0, 0
+            else:
+                raise ValueError("Unknown mask mode {}".format(mode))
             return x, y, l
             
-        if mode == 'random':
+        if mode == 'random' or 'fixed':
             _, _, height, width = masks.size()
             new_masks = torch.zeros(size=masks.size(), dtype=masks.dtype, device=masks.device)
             for i, mask in enumerate(masks):
                 mask = mask.squeeze()
                 size = len(torch.where(mask==1)[0])
-                x, y, l = get_random_pos((height, width), size)
+                x, y, l = get_mask_pos((height, width), size, mode)
                 new_masks[i, :, y:y+l, x:x+l] = 1
             return new_masks
         else:
@@ -426,7 +431,7 @@ class VisualGenerator(pl.LightningModule):
                 imgs = imgs.cpu().detach().numpy()
                 imgs = imgs.transpose((0, 2, 3, 1))
                 for i, poi_img in enumerate(poi_imgs):
-                    residual = (imgs[i] * 255).astype(np.int16) - (poi_img * 255).astype(np.int16)
+                    residual = np.abs((imgs[i] * 255).astype(np.int16) - (poi_img * 255).astype(np.int16))
                     residual = np.clip(residual * 5, 0, 255)
                     residual_img = Image.fromarray(residual.astype(np.uint8))
                     filepath = replace_filepath(imgs_filepath[start_idx + i], replaced_dir='residual')

@@ -4,18 +4,18 @@ module: badcm.visual
 phase: 'train'
 checkpoint: null
 dataset: 'NUS-WIDE'
-image_size: 224
+image_size: 256
 pattern_img:
   mode: 'blend'  # choose from ['patch', 'blend', 'solid']
   path: 'config/pattern.jpg'
-  size: 224
+  size: 256
 surrogate:
   model: 'CLIPImageFeatureExtractor'
   cfg:
     from_pretrain: 'openai/clip-vit-base-patch32'
 batch_size: 64
 epochs: 200
-enable_mask: 'default' # choose from ['default', 'none', 'random']
+enable_mask: 'default' # choose from ['default', 'none', 'random', 'fixed']
 perturbation: true  # generate perturbation directly or poisoned image
 epislon: 0.5
 optim:

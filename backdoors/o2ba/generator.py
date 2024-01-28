@@ -170,7 +170,7 @@ def poison_images(args):
             saved_img.save(poi_filepath)
 
         if args.save_residual:
-            residual = img.astype(np.int16) - poi_img.astype(np.int16)
+            residual = np.abs(img.astype(np.int16) - poi_img.astype(np.int16))
             residual = np.clip(residual * 5, 0, 255)
             residual_img = Image.fromarray(residual.astype(np.uint8))
             filepath = replace_filepath(dataset.imgs[i], replaced_dir='o2ba_residual')
