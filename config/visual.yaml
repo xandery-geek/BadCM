@@ -4,11 +4,11 @@ module: badcm.visual
 phase: 'train'
 checkpoint: null
 dataset: 'NUS-WIDE'
-image_size: 256
+image_size: 224
 pattern_img:
   mode: 'blend'  # choose from ['patch', 'blend', 'solid']
   path: 'config/pattern.jpg'
-  size: 256
+  size: 224
 surrogate:
   model: 'CLIPImageFeatureExtractor'
   cfg:

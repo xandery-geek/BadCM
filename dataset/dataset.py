@@ -8,7 +8,7 @@ from torch.utils.data import DataLoader
 
 
 default_transform = transforms.Compose([
-                transforms.Resize(256),
+                transforms.Resize(224),
                 transforms.CenterCrop(224),
                 transforms.ToTensor(),
                 transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
@@ -19,12 +19,7 @@ class ImageDataset(Dataset):
         self.data_path = data_path
 
         if transform is None:
-            self.transform = transforms.Compose([
-                transforms.Resize(256),
-                transforms.CenterCrop(224),
-                transforms.ToTensor(),
-                transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-            ])
+            self.transform = default_transform
         else:
             self.transform = transform
             

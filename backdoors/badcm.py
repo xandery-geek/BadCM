@@ -1,6 +1,5 @@
 import os
 import numpy as np
-from torchvision import transforms
 from backdoors.base import BaseAttack, BasePoisonedDataset
 from dataset.dataset import get_dataset_filename, replace_filepath
 from badcm.utils import get_poison_path
@@ -151,19 +150,12 @@ class BadCM(BaseAttack):
 
         print("Poisoned data: {}".format(self.poi_path))
 
-    def get_poisoned_data(self, split, p=0.):
-        transform = transforms.Compose([
-            transforms.Resize(256),
-            transforms.CenterCrop(224),
-            transforms.ToTensor(),
-            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-        ])
-        
+    def get_poisoned_data(self, split, p=0.):        
         img_name, text_name, label_name = get_dataset_filename(split)
         data_path = os.path.join(self.cfg['data_path'], self.cfg['dataset'])
 
         dataset = self.dataset_cls(
-            data_path, img_name, text_name, label_name, transform=transform, 
+            data_path, img_name, text_name, label_name, 
             p=p, poisoned_target=self.cfg['target'], poi_path=self.poi_path)        
 
         return dataset

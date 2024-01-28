@@ -4,7 +4,7 @@ import numpy as np
 from PIL import Image
 from torchvision import transforms
 from backdoors.base import BaseAttack, BasePoisonedDataset
-from dataset.dataset import get_dataset_filename
+from dataset.dataset import get_dataset_filename, default_transform
 
 
 def RGB2YUV(x_rgb):
@@ -127,18 +127,9 @@ class FTrojan(BaseAttack):
         }
 
     def get_poisoned_data(self, split, p=0.):
-        transform = transforms.Compose([
-            transforms.Resize(256),
-            transforms.CenterCrop(224),
-        ])
-        post_transform = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-        ])
-
         transform_dict = {
-            'transform': transform,
-            'post_transform': post_transform
+            'transform': transforms.Compose(default_transform.transforms[:2]),
+            'post_transform': transforms.Compose(default_transform.transforms[2:])
         }
         
         img_name, text_name, label_name = get_dataset_filename(split)
