@@ -23,7 +23,7 @@ optim:
   lr: 0.00005
   betas: [0.5, 0.999]
 loss:
-  region: 15.0
+  region: 5.0
   alpha: 0.5
   beta: 0.005
   gamma: 1.0

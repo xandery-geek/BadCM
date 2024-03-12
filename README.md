@@ -1,5 +1,5 @@
 # BadCM
-> Offical implementation for the work "BadCM: Invisible Backdoor Attack against Cross-Modal Learning".
+> Offical implementation for the paper "BadCM: Invisible Backdoor Attack against Cross-Modal Learning", which has been accepted by IEEE TIP.
 
 <center>
 <img src='figures/framework.jpg' alt='framework.jpg'>
@@ -44,6 +44,8 @@ NUS-WIDE, MS-COCO and IAPR-TC are the most widely used databases for the evaluat
 |NUS-WIDE|Image/Tag|190,421|10,500/2,100|21|
 |MS-COCO|Image/Short Sentence|123,287|10,000/5,000|80|
 |IAPR-TC|Image/Long Sentence|20,000|10,000/2,000|255|
+
+The partitioned dataset can be downloaded from [here](https://github.com/xandery-geek/BadCM/releases/tag/dataset). Note that we do not offer the original images, you can access them from the official website of each dataset.
 
 The dataset directory is organized as follows:
 ```shell
@@ -120,3 +122,18 @@ Training under BadCM attack (our method)
 ```shell
 python main.py --config_name dscmr.yaml --attack BadCM --percentage 0.05
 ```
+
+## Cite
+If you find this work is useful, please cite the following:
+
+```
+@ARTICLE{zhang2024badcm,
+  author={Zheng Zhang, Xu Yuan, Lei Zhu, Jingkuan Song, and Liqiang Nie},
+  journal={IEEE Transactions on Image Processing}, 
+  title={BadCM: Invisible Backdoor Attack against Cross-Modal Learning}, 
+  year={2024}
+}
+```
+
+## License
+The code is released under the [Apache 2.0 license](./LICENSE).

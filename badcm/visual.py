@@ -360,7 +360,7 @@ class VisualGenerator(pl.LightningModule):
                 raise ValueError("Unknown mask mode {}".format(mode))
             return x, y, l
             
-        if mode == 'random' or 'fixed':
+        if mode in ['random', 'fixed']:
             _, _, height, width = masks.size()
             new_masks = torch.zeros(size=masks.size(), dtype=masks.dtype, device=masks.device)
             for i, mask in enumerate(masks):
