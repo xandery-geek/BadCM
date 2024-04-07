@@ -127,11 +127,14 @@ python main.py --config_name dscmr.yaml --attack BadCM --percentage 0.05
 If you find this work is useful, please cite the following:
 
 ```
-@ARTICLE{zhang2024badcm,
-  author={Zheng Zhang, Xu Yuan, Lei Zhu, Jingkuan Song, and Liqiang Nie},
+@ARTICLE{10478868,
+  author={Zhang, Zheng and Yuan, Xu and Zhu, Lei and Song, Jingkuan and Nie, Liqiang},
   journal={IEEE Transactions on Image Processing}, 
-  title={BadCM: Invisible Backdoor Attack against Cross-Modal Learning}, 
-  year={2024}
+  title={BadCM: Invisible Backdoor Attack Against Cross-Modal Learning}, 
+  year={2024},
+  volume={33},
+  pages={2558-2571},
+  doi={10.1109/TIP.2024.3378918}
 }
 ```
 
